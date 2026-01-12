@@ -82,7 +82,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
    http://localhost:8080/gioco31_war_exploded
 
 ## Note
-- Il progetto è stato realizzato a scopo didattico e sperimentale
+- Questo progetto nasce come esercizio didattico e sperimentale, sviluppato per divertimento e per consolidare competenze nello sviluppo web con Java e Jakarta EE.
 - Non utilizza framework frontend: tutta la logica client è scritta in JavaScript “vanilla”
 - La sincronizzazione dello stato di gioco avviene esclusivamente tramite WebSocket
-- Le JSP sono collocate in WEB-INF e non sono accessibili direttamente dal browser
