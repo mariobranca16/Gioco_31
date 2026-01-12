@@ -2,8 +2,6 @@
 Questo repository contiene un **progetto web multiplayer** realizzato a scopo personale per giocare al tradizionale gioco di carte napoletane **31** direttamente dal browser.  
 Il gioco supporta **stanze di gioco**, più giocatori simultanei e **aggiornamenti in tempo reale**.
 
----
-
 ## Panoramica
 L’applicazione consente di:
 - creare una **stanza di gioco**
@@ -18,8 +16,6 @@ L’interfaccia mostra in tempo reale lo **stato della partita**, inclusi:
 
 Tutti i client collegati ricevono aggiornamenti automatici grazie all’uso dei **WebSocket**.
 
----
-
 ## Regole del gioco
 L’obiettivo del gioco è ottenere una mano che totalizzi il **valore più alto possibile sullo stesso seme**, fino a un massimo di **31 punti**.
 
@@ -27,8 +23,6 @@ Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
 - **Figure** → valore 10  
 - **Asso** → valore 11  
 - **Carte numeriche** → mantengono il proprio valore  
-
----
 
 ### Svolgimento della partita
 La partita si articola in round che si ripetono secondo queste regole:
@@ -47,8 +41,6 @@ La partita si articola in round che si ripetono secondo queste regole:
 **Regola speciale**  
 Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti gli altri giocatori perdono una vita**.
 
----
-
 ## Funzionalità principali
 - Creazione di stanze con **2–6 giocatori**
 - Accesso tramite **codice stanza** o **link di invito**
@@ -61,8 +53,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 - Gestione eliminazioni e **vincitore finale**
 - Possibilità di **rigiocare** al termine della partita
 
----
-
 ## Tecnologie utilizzate
 - **Java 17**
 - **Jakarta EE**
@@ -72,15 +62,11 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 - **Frontend**: HTML, CSS, JavaScript (vanilla)
 - **Apache Tomcat 10+**
 
----
-
 ## Requisiti
 - **JDK 17 o superiore** (consigliato)
 - **Apache Tomcat 10+**  
   > Necessario per il namespace `jakarta.*`
 - Browser moderno con supporto **WebSocket**
-
----
 
 ## Avvio in locale (Tomcat)
 1. Clona il repository:
