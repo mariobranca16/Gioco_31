@@ -79,7 +79,7 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 5. Avvia il server
 6. Apri il browser e accedi all’applicazione, ad esempio:
    ```text
-   http://localhost:8080/gioco31
+   http://localhost:8080/gioco31_war_exploded
 
 ## Note
 - Il progetto è stato realizzato a scopo didattico e sperimentale
