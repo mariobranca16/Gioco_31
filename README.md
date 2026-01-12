@@ -54,13 +54,13 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 - Possibilità di **rigiocare** al termine della partita
 
 ## Tecnologie utilizzate
-- **Java 17**
+- **Java 24**
 - **Jakarta EE**
   - Servlet
   - WebSocket (`@ServerEndpoint`)
 - **JSP** (collocate in `WEB-INF/jsp`)
 - **Frontend**: HTML, CSS, JavaScript (vanilla)
-- **Apache Tomcat 10+**
+- **Apache Tomcat 11**
 
 ## Requisiti
 - **JDK 17 o superiore** (consigliato)
