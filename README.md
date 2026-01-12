@@ -24,7 +24,7 @@ Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
 - **Asso** → valore 11  
 - **Carte numeriche** → mantengono il proprio valore  
 
-### Svolgimento della partita
+## Svolgimento della partita
 La partita si articola in round che si ripetono secondo queste regole:
 - Ogni giocatore ha **3 carte in mano** e **3 vite** iniziali
 - Nel proprio turno un giocatore:
