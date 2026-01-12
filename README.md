@@ -96,13 +96,13 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 
 1. Clona il repository:
    ```bash
-   git clone <URL_DEL_REPO>
+   git clone <URL_DEL_REPOSITORY>
    cd <NOME_CARTELLA>
 2. Importa il progetto nel tuo IDE (es. IntelliJ IDEA)
 3. Assicurati che il progetto sia configurato come Web Application e utilizzi Jakarta EE (namespace jakarta.*)
 4. Configura Apache Tomcat 10+ come Application Server
 5. Avvia il server
-6. Apri il browser e accedi a: http://localhost:8080/<context-path>
+6. Apri il browser e accedi a: http://localhost:8080/(context-path del progetto)
 
 ## Note
 
