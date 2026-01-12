@@ -77,7 +77,9 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 3. Assicurati che il progetto sia configurato come Web Application e utilizzi Jakarta EE (namespace jakarta.*)
 4. Configura Apache Tomcat 10+ come Application Server
 5. Avvia il server
-6. Apri il browser e accedi a: http://localhost:8080/<context-path>
+6. Apri il browser e accedi all’applicazione, ad esempio:
+   ```text
+   http://localhost:8080/gioco31
 
 ## Note
 - Il progetto è stato realizzato a scopo didattico e sperimentale
