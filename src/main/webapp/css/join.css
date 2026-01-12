@@ -1,0 +1,20 @@
+body.joinPage{
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    padding:34px 16px;
+
+    background:
+            radial-gradient(900px 420px at 20% 10%, rgba(77,212,255,.12), transparent 55%),
+            radial-gradient(900px 420px at 80% 0%, rgba(120,140,255,.10), transparent 55%),
+            linear-gradient(180deg, #0b1220, #070b14);
+}
+
+.joinPage .top-info{ margin-bottom:14px; }
+.joinPage .top-info-sub{ margin-top:-6px; }
+
+.joinPage button{
+    border-color: rgba(77,212,255,.45);
+    background: linear-gradient(135deg, rgba(77,212,255,.20), rgba(120,140,255,.14));
+}
+.joinPage button:hover{ filter:brightness(1.08); }

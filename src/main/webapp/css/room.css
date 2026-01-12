@@ -1,0 +1,947 @@
+/* =========================
+            HEADER
+   ========================= */
+
+header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+
+    position:sticky;
+    top:0;
+    z-index:10;
+
+    padding:calc(14px * var(--S)) calc(18px * var(--S));
+    border-bottom:1px solid rgba(255,255,255,.12);
+
+    backdrop-filter:blur(6px);
+    background:rgba(10,15,28,.70);
+}
+
+header h1{
+    margin:0;
+    line-height:1;
+
+    font-size:calc(20px * var(--S));
+    font-weight:1000;
+    letter-spacing:.7px;
+
+    background:linear-gradient(180deg, #ffffff, rgba(77,212,255,.95));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+
+    text-shadow:
+            0 1px 10px rgba(77,212,255,.14),
+            0 8px 22px rgba(0,0,0,.28);
+}
+
+header .metaLine{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+    flex-wrap:wrap;
+
+    color:var(--muted);
+    font-size:calc(13px * var(--S));
+}
+
+header .metaLine .sep{
+    opacity:.65;
+}
+
+/* =========================
+        LAYOUT BASE PAGINA
+   ========================= */
+
+.players{
+    display:flex;
+    gap:10px;
+
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: stretch;
+
+    overflow: hidden;
+    padding:12px;
+    margin-top:14px;
+
+    border:1px solid var(--line);
+    border-radius: var(--r);
+    background: rgba(18,26,43,.65);
+    box-shadow: var(--shadow);
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:14px;
+    margin-top:14px;
+}
+
+.panel > h2,
+.tableBottomRow > h2{
+    margin-bottom:10px;
+    padding-left:8px;
+
+    font-size:18px;
+    letter-spacing:.25px;
+}
+
+/* =========================
+           CARD PLAYER
+   ========================= */
+
+.p{
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    position:relative;
+
+    flex: 0 1 clamp(140px, 18vw, 220px);
+    min-width: 0;
+    max-width: 220px;
+
+    padding:10px 12px;
+    padding-right:74px;
+
+    border-radius:14px;
+    border:1px solid var(--line);
+    background:rgba(15,22,38,.65);
+
+    overflow:hidden;
+    transition:transform .08s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.p.current{
+    transform:translateY(-1px);
+    border-color:rgba(77,212,255,.7);
+    box-shadow:
+            0 0 0 2px rgba(77,212,255,.18) inset,
+            0 12px 18px rgba(0,0,0,.18);
+}
+
+.p.elim{
+    opacity:.45;
+    filter:saturate(.6);
+}
+
+.p .badge{
+    width:34px;
+    height:34px;
+
+    display:grid;
+    place-items:center;
+
+    flex:0 0 auto;
+
+    border-radius:12px;
+    background:rgba(77,212,255,.16);
+    border:1px solid rgba(77,212,255,.28);
+
+    font-weight:900;
+}
+
+.p .info{
+    line-height:1.2;
+    min-width:0;
+    flex:1 1 auto;
+}
+
+.p .name{
+    font-weight:800;
+    font-size:14px;
+
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.p .sub{
+    margin-top:2px;
+
+    display:flex;
+    align-items:center;
+    gap:8px;
+
+    color:var(--muted);
+    font-size:12px;
+
+    min-width:0;
+}
+
+.hearts{
+    flex:0 0 auto;
+    color:#ff6b86;
+    letter-spacing:1px;
+    font-size:12px;
+}
+
+.state{
+    min-width:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:90px;
+}
+
+.tag{
+    position:absolute;
+    right:8px;
+    top:8px;
+
+    padding:3px 7px;
+
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:rgba(0,0,0,.12);
+
+    color:var(--muted);
+    font-size:10px;
+
+    white-space:nowrap;
+}
+
+.tag.turn{
+    color:var(--accent);
+    border-color:rgba(77,212,255,.35);
+}
+
+/* =========================
+   TAVOLO — TOP ROW (pending/mazzo/scarti + comandi)
+   ========================= */
+
+.tableTopRow{
+    --topMax:170px;
+    --topTitle:18px;
+    --topCardW:clamp(135px, 14vw, 170px);
+    --topCardH:205px;
+
+    --playGap:20px;
+    --sideW:180px;
+    --colGap:12px;
+
+    display:grid;
+    grid-template-columns:1fr max-content 1fr;
+    grid-template-areas:"ghost play side";
+    column-gap:var(--colGap);
+    align-items:start;
+
+    width:100%;
+}
+
+.tableTopRow button{
+    font-size:12px;
+    line-height:1;
+}
+
+.tableTopRow::before{
+    content:"";
+    grid-area:ghost;
+    width:var(--sideW);
+}
+
+.tableTopRow .playArea{
+    grid-area:play;
+
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    gap:var(--playGap);
+
+    transform:translateX(calc(-1 * (var(--topMax) + var(--playGap)) / 2));
+}
+
+.tableTopRow .playArea > #pendingWrap,
+.tableTopRow .playArea > .pileTall{
+    flex:0 0 var(--topMax);
+    max-width:var(--topMax);
+}
+
+.tableTopRow .sideArea{
+    grid-area:side;
+    justify-self:start;
+
+    width:var(--sideW);
+
+    display:flex;
+    flex-direction:column;
+    gap:0;
+
+    --sideBtnW:150px;
+}
+
+/* =========================
+   PILE TALL (mazzo/scarti)
+   ========================= */
+
+.pileTall{
+    width:100%;
+    max-width:var(--topMax);
+
+    margin:0;
+    padding-left:10px;
+    padding-right:10px;
+
+    align-items:center;
+}
+
+.pileTall .title{
+    margin-bottom:6px;
+
+    text-align:center;
+    font-size:var(--topTitle);
+    font-weight:1000;
+    letter-spacing:.25px;
+    color:var(--text);
+}
+
+.pileTall .title::after{
+    content:"";
+    display:block;
+
+    width:70%;
+    height:1px;
+    margin:6px auto 0;
+
+    background:rgba(255,255,255,.12);
+}
+
+.pileTall .cardBox.tall{
+    width:var(--topCardW);
+    max-width:100%;
+    height:var(--topCardH);
+
+    margin:0 auto;
+    padding:10px;
+
+    border-radius:18px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    overflow:hidden;
+}
+
+.pileTall .cardBox.tall img{
+    max-height:calc(var(--topCardH) - 25px);
+    max-width:100%;
+
+    object-fit:contain;
+    display:block;
+
+    border-radius:12px;
+    opacity:.92;
+}
+
+.pileTall button{
+    width:var(--topCardW);
+    max-width:100%;
+
+    margin:0 auto;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    text-align:center;
+    white-space:normal;
+    line-height:1.15;
+}
+
+/* =========================
+   Pending (Carta pescata)
+   ========================= */
+
+.tableTopRow #pendingWrap{
+    display:flex !important;
+
+    visibility:hidden;
+    opacity:0;
+    pointer-events:none;
+}
+
+.tableTopRow.hasPendingTop #pendingWrap{
+    visibility:visible;
+    opacity:1;
+    pointer-events:auto;
+}
+
+.pendingPile{
+    width:100%;
+    max-width:var(--topMax);
+
+    padding:10px;
+    border-radius:18px;
+
+    align-self:start;
+    min-width:0;
+
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.pendingPile .title{
+    margin:0;
+
+    text-align:center;
+    font-size:16px;
+    font-weight:950;
+    letter-spacing:.25px;
+    color:var(--text);
+}
+
+.pendingPile .cardBox.pendingCard{
+    height:var(--topCardH);
+
+    border-radius:18px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(15,22,38,.62);
+    box-shadow:0 12px 18px rgba(0,0,0,.22);
+
+    padding:12px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    overflow:hidden;
+}
+
+.pendingPile .cardBox.pendingCard img{
+    max-height:calc(var(--topCardH) - 25px);
+    max-width:100%;
+
+    object-fit:contain;
+    border-radius:12px;
+    opacity:.96;
+
+    filter:drop-shadow(0 10px 12px rgba(0,0,0,.35));
+}
+
+.pendingPile .pendingActions{
+    margin-top:0;
+
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:6px;
+}
+
+.pendingPile .pendingActions > *{
+    width:100%;
+}
+
+.pendingPile .pendingActions button{
+    white-space:nowrap;
+    font-size:clamp(9px, 0.85vw, 11px);
+    padding:0 7px;
+    letter-spacing:0;
+}
+
+.pendingPile .pendingActions #btnConfirmKeep{
+    font-size:clamp(8px, 0.75vw, 10px);
+    padding:0 6px;
+}
+
+/* =========================
+   BOX DESTRA: Comandi + Invita
+   ========================= */
+
+.sidePile{
+    padding:8px;
+    border-radius:16px;
+
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(15,22,38,.55);
+    box-shadow:0 12px 18px rgba(0,0,0,.22);
+
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+
+    --sideBtnW:150px;
+}
+
+.sidePile h2{
+    margin:0;
+
+    text-align:center;
+    font-size:17px;
+    font-weight:950;
+    letter-spacing:.2px;
+}
+
+.sideDivider{
+    height:1px;
+    background:rgba(255,255,255,.12);
+    margin:6px 0;
+}
+
+.sidePile button{
+    width:var(--sideBtnW);
+    height:34px;
+
+    padding:0 10px;
+    font-size:12px;
+}
+
+.sidePile .cmdRow{
+    margin-top:4px;
+
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    align-items:center;
+}
+
+.sidePile #startHint{
+    margin-top:4px;
+
+    text-align:center;
+    font-size:11px;
+    line-height:1.2;
+}
+
+.sidePile .inviteRow{
+    margin-top:4px;
+
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    align-items:center;
+}
+
+.sidePile .inviteInput{
+    width:100%;
+    padding:9px 10px;
+    font-size:11px;
+}
+
+/* =========================
+   TAVOLO — BOTTOM ROW (mano)
+   ========================= */
+
+.tableBottomRow{
+    margin:0 0 8px 0 !important;
+}
+
+.handRow{
+    width:100%;
+
+    display:flex;
+    justify-content:center;
+    gap:18px;
+
+    flex-wrap:nowrap;
+    overflow-x:auto;
+
+    padding:6px 14px 8px;
+
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+}
+
+.handRow::before,
+.handRow::after{
+    content:"";
+    flex:0 0 6px;
+}
+
+.handRow::-webkit-scrollbar{
+    height:10px;
+}
+
+.handRow::-webkit-scrollbar-thumb{
+    background:rgba(255,255,255,.14);
+    border-radius:999px;
+}
+
+.handRow::-webkit-scrollbar-track{
+    background:rgba(0,0,0,.10);
+    border-radius:999px;
+}
+
+.handCard{
+    scroll-snap-align:center;
+
+    flex:0 0 200px;
+    height:200px;
+
+    border-radius:20px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(15,22,38,.62);
+    box-shadow:0 12px 18px rgba(0,0,0,.22);
+
+    padding:10px;
+
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-start;
+    gap:8px;
+
+    position:relative;
+    overflow:hidden;
+
+    transition:transform .08s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.handCard:hover{
+    transform:translateY(-1px);
+    border-color:rgba(77,212,255,.22);
+}
+
+.handCard.selectable{
+    cursor:pointer;
+}
+
+.handCard.selectable:hover{
+    transform:translateY(-4px);
+    border-color:rgba(77,212,255,.35);
+    box-shadow:0 18px 28px rgba(0,0,0,.32);
+}
+
+.handCard.selected{
+    border-color:rgba(53,226,138,.65);
+    box-shadow:
+            0 0 0 2px rgba(53,226,138,.18) inset,
+            0 12px 18px rgba(0,0,0,.22);
+}
+
+.handCard .top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.handCard .val{
+    color:var(--accent);
+    font-weight:900;
+    font-size:22px;
+}
+
+.handCard .imgWrap{
+    height:120px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.handCard .imgWrap img{
+    max-height:120px;
+    max-width:180px;
+
+    object-fit:contain;
+
+    border-radius:10px;
+    opacity:.95;
+
+    filter:drop-shadow(0 10px 12px rgba(0,0,0,.35));
+}
+
+.handCard .muted{
+    font-size:12px;
+}
+
+.handInfoBelow{
+    margin-top:6px;
+
+    display:flex;
+    gap:14px;
+
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:center;
+
+    text-align:center;
+}
+
+/* =========================
+        OVERLAY VINCITORE
+   ========================= */
+
+.winnerTitle{
+    margin:0 0 10px 0;
+
+    font-size:18px;
+    font-weight:900;
+    letter-spacing:.3px;
+    text-transform:uppercase;
+
+    color:var(--muted);
+}
+
+.winnerName{
+    margin:0;
+
+    font-size:38px;
+    font-weight:1000;
+    letter-spacing:.2px;
+    line-height:1.05;
+}
+
+.winnerSub{
+    margin:10px 0 0 0;
+
+    color:var(--muted);
+    line-height:1.35;
+}
+
+/* =========================
+            RESPONSIVE
+   ========================= */
+
+@media (max-width: 1150px){
+    .tableTopRow{
+        grid-template-columns:1fr;
+        grid-template-areas:"play" "side";
+        row-gap:14px;
+    }
+
+    .tableTopRow::before{
+        content:none;
+    }
+
+    .tableTopRow .playArea{
+        transform:none;
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    .tableTopRow .sideArea{
+        width:100%;
+        max-width:420px;
+        justify-self:center;
+    }
+}
+
+@media (max-width: 700px){
+    header{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
+    }
+
+    header .metaLine{
+        line-height:1.35;
+    }
+}
+
+@media (max-width: 520px){
+    .handCard{
+        flex:0 0 180px;
+        height:190px;
+    }
+
+    .handCard .imgWrap{
+        height:105px;
+    }
+
+    .handCard .imgWrap img{
+        max-height:105px;
+        max-width:160px;
+
+        border-radius:10px;
+        opacity:.95;
+    }
+}
+
+/* =========================
+   FX — Pesca dagli scarti
+   ========================= */
+
+#discardPile{
+    position:relative;
+    overflow:visible;
+}
+
+@keyframes discardPulse{
+    0%   { transform: translateY(0); }
+    35%  { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
+}
+
+@keyframes discardCardPop{
+    0%   { transform: translateY(0) rotate(0deg); }
+    35%  { transform: translateY(-7px) rotate(-1deg); }
+    100% { transform: translateY(0) rotate(0deg); }
+}
+
+#discardPile.flashDiscard{
+    border-color:rgba(77,212,255,.45) !important;
+    box-shadow:
+            0 0 0 4px rgba(77,212,255,.14),
+            0 18px 28px rgba(0,0,0,.32) !important;
+    animation:discardPulse .55s ease;
+}
+
+#discardPile.flashDiscard .cardBox{
+    animation:discardCardPop .55s ease;
+}
+
+@keyframes discardMEGA{
+    0%   { transform: translateY(0) scale(1); }
+    10%  { transform: translateY(-4px) scale(1.03) rotate(-1deg); }
+    25%  { transform: translateY(0)  scale(1.06) rotate(1deg); }
+    45%  { transform: translateY(-3px) scale(1.04) rotate(-1deg); }
+    70%  { transform: translateY(0) scale(1.02) rotate(0deg); }
+    100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes discardRING{
+    0%   { opacity: 0; transform: scale(.94); }
+    15%  { opacity: 1; transform: scale(1.02); }
+    65%  { opacity: .85; transform: scale(1.06); }
+    100% { opacity: 0; transform: scale(1.12); }
+}
+
+#discardPile.discardMega{
+    border-color:rgba(77,212,255,.75) !important;
+    box-shadow:
+            0 0 0 6px rgba(77,212,255,.18),
+            0 0 40px rgba(77,212,255,.35),
+            0 22px 40px rgba(0,0,0,.45) !important;
+    animation:discardMEGA 1.05s cubic-bezier(.2,.9,.2,1);
+}
+
+#discardPile.discardMega::after{
+    content:"";
+    position:absolute;
+    inset:-10px;
+
+    border-radius:22px;
+    pointer-events:none;
+
+    background:
+            radial-gradient(closest-side, rgba(77,212,255,.22), transparent 70%),
+            conic-gradient(from 90deg, rgba(77,212,255,.0), rgba(77,212,255,.55), rgba(77,212,255,.0));
+
+    filter:blur(.2px);
+    animation:discardRING 1.05s ease-out;
+}
+
+/* =========================
+   FX — Pesca dal mazzo
+   ========================= */
+
+#deckPile{
+    position:relative;
+    overflow:visible;
+}
+
+.deckNum{
+    color:var(--accent);
+    font-weight:1000;
+}
+
+@keyframes deckMEGA{
+    0%   { transform: translateY(0) scale(1); }
+    10%  { transform: translateY(-4px) scale(1.03) rotate(1deg); }
+    25%  { transform: translateY(0)  scale(1.06) rotate(-1deg); }
+    45%  { transform: translateY(-3px) scale(1.04) rotate(1deg); }
+    70%  { transform: translateY(0) scale(1.02) rotate(0deg); }
+    100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes deckRING{
+    0%   { opacity: 0; transform: scale(.94); }
+    15%  { opacity: 1; transform: scale(1.02); }
+    65%  { opacity: .85; transform: scale(1.06); }
+    100% { opacity: 0; transform: scale(1.12); }
+}
+
+#deckPile.deckMega{
+    border-color:rgba(77,212,255,.75) !important;
+    box-shadow:
+            0 0 0 6px rgba(77,212,255,.18),
+            0 0 40px rgba(77,212,255,.35),
+            0 22px 40px rgba(0,0,0,.45) !important;
+    animation:deckMEGA 1.05s cubic-bezier(.2,.9,.2,1);
+}
+
+#deckPile.deckMega::after{
+    content:"";
+    position:absolute;
+    inset:-10px;
+
+    border-radius:22px;
+    pointer-events:none;
+
+    background:
+            radial-gradient(closest-side, rgba(77,212,255,.22), transparent 70%),
+            conic-gradient(from 90deg, rgba(77,212,255,.0), rgba(77,212,255,.55), rgba(77,212,255,.0));
+
+    filter:blur(.2px);
+    animation:deckRING 1.05s ease-out;
+}
+
+/* =========================
+   FX — Label e carta volante
+   ========================= */
+
+.fx-discard-label{
+    position:fixed;
+    z-index:100000;
+
+    left:0;
+    top:0;
+
+    transform:translate(-50%, -50%);
+
+    padding:10px 12px;
+
+    border-radius:14px;
+    border:2px solid rgba(77,212,255,.55);
+    background:rgba(10,15,28,.92);
+
+    box-shadow:
+            0 0 0 5px rgba(77,212,255,.18),
+            0 18px 40px rgba(0,0,0,.55);
+
+    font-weight:1000;
+    letter-spacing:.6px;
+    text-transform:uppercase;
+    white-space:nowrap;
+
+    animation:fxLabelPop 1.2s ease forwards;
+}
+
+@keyframes fxLabelPop{
+    0%   { opacity:0; transform: translate(-50%,-50%) scale(.82); }
+    12%  { opacity:1; transform: translate(-50%,-58%) scale(1.08); }
+    55%  { opacity:1; transform: translate(-50%,-62%) scale(1.02); }
+    100% { opacity:0; transform: translate(-50%,-76%) scale(.96); }
+}
+
+.fx-flycard{
+    position:fixed;
+    z-index:100000;
+    pointer-events:none;
+
+    border-radius:18px;
+    overflow:hidden;
+
+    background:rgba(18,26,43,.92);
+    border:2px solid rgba(255,255,255,.18);
+
+    box-shadow:
+            0 0 0 5px rgba(77,212,255,.14),
+            0 24px 55px rgba(0,0,0,.65);
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.fx-flycard img{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    filter:drop-shadow(0 16px 22px rgba(0,0,0,.45));
+}
