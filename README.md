@@ -1,11 +1,11 @@
-# 🎴 Gioco del 31
+# Gioco del 31
 
 Questo repository contiene un **progetto web multiplayer** realizzato a scopo personale per giocare al tradizionale gioco di carte napoletane **31** direttamente dal browser.  
 Il gioco supporta **stanze di gioco**, più giocatori simultanei e **aggiornamenti in tempo reale**.
 
 ---
 
-## 📌 Panoramica
+## Panoramica
 
 L’applicazione consente di:
 
@@ -23,7 +23,7 @@ Tutti i client collegati ricevono aggiornamenti automatici grazie all’uso dei 
 
 ---
 
-## 🃏 Regole del gioco
+## Regole del gioco
 
 L’obiettivo del gioco è ottenere una mano che totalizzi il **valore più alto possibile sullo stesso seme**, fino a un massimo di **31 punti**.
 
@@ -35,7 +35,7 @@ Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
 
 ---
 
-### 🔁 Svolgimento della partita
+### Svolgimento della partita
 
 La partita si articola in round che si ripetono secondo queste regole:
 
@@ -51,12 +51,12 @@ La partita si articola in round che si ripetono secondo queste regole:
   - chi perde tutte le vite viene eliminato
 - Vince la partita **l’ultimo giocatore rimasto in gioco**
 
-📌 **Regola speciale**  
+**Regola speciale**  
 Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti gli altri giocatori perdono una vita**.
 
 ---
 
-## ⚙️ Funzionalità principali
+## Funzionalità principali
 
 - Creazione di stanze con **2–6 giocatori**
 - Accesso tramite **codice stanza** o **link di invito**
@@ -71,7 +71,7 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 
 ---
 
-## 🛠️ Tecnologie utilizzate
+## Tecnologie utilizzate
 
 - **Java 17**
 - **Jakarta EE**
@@ -83,7 +83,7 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 
 ---
 
-## 📋 Requisiti
+## Requisiti
 
 - **JDK 17 o superiore** (consigliato)
 - **Apache Tomcat 10+**  
@@ -92,7 +92,7 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 
 ---
 
-## 🚀 Avvio in locale (Tomcat)
+## Avvio in locale (Tomcat)
 
 1. Clona il repository:
    ```bash
@@ -104,7 +104,7 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 5. Avvia il server
 6. Apri il browser e accedi a: http://localhost:8080/<context-path>
 
-## 📌 Note
+## Note
 
 - Il progetto è stato realizzato a scopo didattico e sperimentale
 - Non utilizza framework frontend: tutta la logica client è scritta in JavaScript “vanilla”
