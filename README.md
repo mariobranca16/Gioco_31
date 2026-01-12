@@ -8,7 +8,6 @@ Il gioco supporta **stanze di gioco**, più giocatori simultanei e **aggiornamen
 ## Panoramica
 
 L’applicazione consente di:
-
 - creare una **stanza di gioco**
 - invitare altri giocatori tramite **codice stanza** o **link**
 - giocare una partita completa con **turni sincronizzati** tra tutti i partecipanti
@@ -24,11 +23,9 @@ Tutti i client collegati ricevono aggiornamenti automatici grazie all’uso dei 
 ---
 
 ## Regole del gioco
-
 L’obiettivo del gioco è ottenere una mano che totalizzi il **valore più alto possibile sullo stesso seme**, fino a un massimo di **31 punti**.
 
 Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
-
 - **Figure** → valore 10  
 - **Asso** → valore 11  
 - **Carte numeriche** → mantengono il proprio valore  
@@ -38,7 +35,6 @@ Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
 ### Svolgimento della partita
 
 La partita si articola in round che si ripetono secondo queste regole:
-
 - Ogni giocatore ha **3 carte in mano** e **3 vite** iniziali
 - Nel proprio turno un giocatore:
   - pesca una carta dal **mazzo** o dagli **scarti**
@@ -57,7 +53,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 ---
 
 ## Funzionalità principali
-
 - Creazione di stanze con **2–6 giocatori**
 - Accesso tramite **codice stanza** o **link di invito**
 - Partita **multiplayer in tempo reale**
@@ -72,7 +67,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 ---
 
 ## Tecnologie utilizzate
-
 - **Java 17**
 - **Jakarta EE**
   - Servlet
@@ -84,7 +78,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 ---
 
 ## Requisiti
-
 - **JDK 17 o superiore** (consigliato)
 - **Apache Tomcat 10+**  
   > Necessario per il namespace `jakarta.*`
@@ -93,7 +86,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 ---
 
 ## Avvio in locale (Tomcat)
-
 1. Clona il repository:
    ```bash
    git clone <URL_DEL_REPOSITORY>
@@ -105,7 +97,6 @@ Se un giocatore raggiunge **31 punti**, vince immediatamente il round e **tutti 
 6. Apri il browser e accedi a: http://localhost:8080/(context-path del progetto)
 
 ## Note
-
 - Il progetto è stato realizzato a scopo didattico e sperimentale
 - Non utilizza framework frontend: tutta la logica client è scritta in JavaScript “vanilla”
 - La sincronizzazione dello stato di gioco avviene esclusivamente tramite WebSocket
