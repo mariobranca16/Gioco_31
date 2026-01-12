@@ -1,12 +1,10 @@
 # Gioco del 31
-
 Questo repository contiene un **progetto web multiplayer** realizzato a scopo personale per giocare al tradizionale gioco di carte napoletane **31** direttamente dal browser.  
 Il gioco supporta **stanze di gioco**, più giocatori simultanei e **aggiornamenti in tempo reale**.
 
 ---
 
 ## Panoramica
-
 L’applicazione consente di:
 - creare una **stanza di gioco**
 - invitare altri giocatori tramite **codice stanza** o **link**
@@ -33,7 +31,6 @@ Il gioco utilizza un **mazzo di carte napoletane**, con i seguenti valori:
 ---
 
 ### Svolgimento della partita
-
 La partita si articola in round che si ripetono secondo queste regole:
 - Ogni giocatore ha **3 carte in mano** e **3 vite** iniziali
 - Nel proprio turno un giocatore:
