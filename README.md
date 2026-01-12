@@ -11,7 +11,8 @@ L’obiettivo è ottenere una mano che totalizzi il valore più alto possibile *
 - ogni asso ha valore 11;
 - tutte le altre carte mantengono il proprio valore.
 
-- Ogni giocatore ha **3 carte in mano**.
+La partita si svolge nei seguenti passi che si ripetono:
+- Ogni giocatore ha **3 carte in mano** e 3 vite totali.
 - Nel proprio turno si **pesca una carta** (dal mazzo o dagli scarti) e si decide se **tenerla** scartando una delle tre carte in mano, oppure **scartarla** e chiudere il turno.
 - In qualunque momento durante la partita è possibile **bussare** per avviare i turni finali: dopo la bussata, gli altri giocatori hanno un ultimo giro per migliorare la mano.
 - A fine round, chi ha il punteggio peggiore (o chi ha bussato se qualcuno lo raggiunge/supera) **perde una vita**. I giocatori senza vite vengono eliminati.
