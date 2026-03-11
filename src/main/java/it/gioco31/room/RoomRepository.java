@@ -9,9 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class RoomRepository {
     private static final ConcurrentMap<String, GameRoom> ROOMS = new ConcurrentHashMap<>();
+    private static final long CLEANUP_INTERVAL_MS = 60_000L;
+    private static final AtomicLong NEXT_CLEANUP_AT_MS = new AtomicLong(0L);
 
     private static final SecureRandom RND = new SecureRandom();
     private static final char[] ALPH = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray();
@@ -28,22 +31,22 @@ public final class RoomRepository {
     }
 
     public static boolean putIfAbsent(GameRoom room) {
-        cleanupStaleRooms();
+        cleanupStaleRoomsIfNeeded();
         return ROOMS.putIfAbsent(norm(room.roomId()), room) == null;
     }
 
     public static GameRoom get(String roomId) {
-        cleanupStaleRooms();
+        cleanupStaleRoomsIfNeeded();
         return ROOMS.get(norm(roomId));
     }
 
     public static boolean exists(String roomId) {
-        cleanupStaleRooms();
+        cleanupStaleRoomsIfNeeded();
         return ROOMS.containsKey(norm(roomId));
     }
 
     public static GameRoom createNewRoom(int slots) {
-        cleanupStaleRooms();
+        cleanupStaleRoomsIfNeeded();
 
         if (slots < GameConstants.MIN_PLAYERS || slots > GameConstants.MAX_PLAYERS)
             throw new IllegalArgumentException("slots deve essere tra " + GameConstants.MIN_PLAYERS + " e " + GameConstants.MAX_PLAYERS);
@@ -75,9 +78,15 @@ public final class RoomRepository {
         return sb.toString();
     }
 
-    private static void cleanupStaleRooms() {
+    private static void cleanupStaleRoomsIfNeeded() {
         long now = System.currentTimeMillis();
+        long nextCleanupAt = NEXT_CLEANUP_AT_MS.get();
+        if (now < nextCleanupAt) return;
+        if (!NEXT_CLEANUP_AT_MS.compareAndSet(nextCleanupAt, now + CLEANUP_INTERVAL_MS)) return;
+        cleanupStaleRooms(now);
+    }
 
+    private static void cleanupStaleRooms(long now) {
         for (var e : ROOMS.entrySet()) {
             GameRoom room = e.getValue();
             if (room == null) continue;

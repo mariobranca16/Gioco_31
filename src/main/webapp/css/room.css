@@ -129,6 +129,12 @@ header .metaLine .sep{
     filter:saturate(.6);
 }
 
+.p.spectating{
+    opacity:.7;
+    filter:saturate(.5) sepia(.2);
+    border-style:dashed;
+}
+
 .p .badge{
     width:34px;
     height:34px;
@@ -761,30 +767,6 @@ header .metaLine .sep{
     overflow:visible;
 }
 
-@keyframes discardPulse{
-    0%   { transform: translateY(0); }
-    35%  { transform: translateY(-3px); }
-    100% { transform: translateY(0); }
-}
-
-@keyframes discardCardPop{
-    0%   { transform: translateY(0) rotate(0deg); }
-    35%  { transform: translateY(-7px) rotate(-1deg); }
-    100% { transform: translateY(0) rotate(0deg); }
-}
-
-#discardPile.flashDiscard{
-    border-color:rgba(77,212,255,.45) !important;
-    box-shadow:
-            0 0 0 4px rgba(77,212,255,.14),
-            0 18px 28px rgba(0,0,0,.32) !important;
-    animation:discardPulse .55s ease;
-}
-
-#discardPile.flashDiscard .cardBox{
-    animation:discardCardPop .55s ease;
-}
-
 @keyframes discardMEGA{
     0%   { transform: translateY(0) scale(1); }
     10%  { transform: translateY(-4px) scale(1.03) rotate(-1deg); }
@@ -838,47 +820,6 @@ header .metaLine .sep{
 .deckNum{
     color:var(--accent);
     font-weight:1000;
-}
-
-@keyframes deckMEGA{
-    0%   { transform: translateY(0) scale(1); }
-    10%  { transform: translateY(-4px) scale(1.03) rotate(1deg); }
-    25%  { transform: translateY(0)  scale(1.06) rotate(-1deg); }
-    45%  { transform: translateY(-3px) scale(1.04) rotate(1deg); }
-    70%  { transform: translateY(0) scale(1.02) rotate(0deg); }
-    100% { transform: translateY(0) scale(1); }
-}
-
-@keyframes deckRING{
-    0%   { opacity: 0; transform: scale(.94); }
-    15%  { opacity: 1; transform: scale(1.02); }
-    65%  { opacity: .85; transform: scale(1.06); }
-    100% { opacity: 0; transform: scale(1.12); }
-}
-
-#deckPile.deckMega{
-    border-color:rgba(77,212,255,.75) !important;
-    box-shadow:
-            0 0 0 6px rgba(77,212,255,.18),
-            0 0 40px rgba(77,212,255,.35),
-            0 22px 40px rgba(0,0,0,.45) !important;
-    animation:deckMEGA 1.05s cubic-bezier(.2,.9,.2,1);
-}
-
-#deckPile.deckMega::after{
-    content:"";
-    position:absolute;
-    inset:-10px;
-
-    border-radius:22px;
-    pointer-events:none;
-
-    background:
-            radial-gradient(closest-side, rgba(77,212,255,.22), transparent 70%),
-            conic-gradient(from 90deg, rgba(77,212,255,.0), rgba(77,212,255,.55), rgba(77,212,255,.0));
-
-    filter:blur(.2px);
-    animation:deckRING 1.05s ease-out;
 }
 
 /* =========================

@@ -5,8 +5,8 @@ import it.gioco31.model.Phase;
 import it.gioco31.model.Player;
 import it.gioco31.service.ThirtyOneEngine;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class GameRoom {
@@ -15,7 +15,7 @@ public final class GameRoom {
     private final ThirtyOneEngine engine = new ThirtyOneEngine();
     private final ReentrantLock lock = new ReentrantLock();
 
-    private final Map<String, Integer> tokenToIndex = new HashMap<>();
+    private final Map<String, Integer> tokenToIndex = new ConcurrentHashMap<>();
 
     private volatile long lastActivityMs = System.currentTimeMillis();
 
@@ -53,9 +53,7 @@ public final class GameRoom {
     }
 
     public Integer indexByToken(String token) {
-        lock.lock();
-        try { return tokenToIndex.get(token); }
-        finally { lock.unlock(); }
+        return tokenToIndex.get(token);
     }
 
     public void releaseTokenAndFreeSlot(String token) {

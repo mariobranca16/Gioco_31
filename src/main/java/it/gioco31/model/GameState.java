@@ -18,6 +18,7 @@ public final class GameState implements Serializable {
 
     private int dealerIndex = 0;
     private int currentIndex = 0;
+    private int nextMatchDealerIndex = 0;
     private Phase phase = Phase.WAITING_FOR_PLAYERS;
 
     private int finalTurnsRemaining = 0;
@@ -74,6 +75,9 @@ public final class GameState implements Serializable {
 
     public int getDealerIndex() { return dealerIndex; }
     public void setDealerIndex(int dealerIndex) { this.dealerIndex = dealerIndex; }
+
+    public int getNextMatchDealerIndex() { return nextMatchDealerIndex; }
+    public void setNextMatchDealerIndex(int nextMatchDealerIndex) { this.nextMatchDealerIndex = nextMatchDealerIndex; }
 
     public int getCurrentIndex() { return currentIndex; }
     public void setCurrentIndex(int currentIndex) { this.currentIndex = currentIndex; }

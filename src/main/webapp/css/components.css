@@ -43,21 +43,6 @@ header .meta{color:var(--muted); font-size:calc(13px * var(--S))}
 
 .panel h2:first-child{ margin-top:0; }
 
-.banner{
-    margin:14px 0 0 0;
-    border:1px solid rgba(255,255,255,.12);
-    background: rgba(18,26,43,.55);
-    border-radius: 16px;
-    padding:10px 12px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:10px;
-    box-shadow: var(--shadow);
-}
-.banner .title{font-weight:900; letter-spacing:.2px}
-.banner .sub{color:var(--muted); font-size:13px}
-
 .pill{
     padding:6px 10px;
     border-radius: 999px;

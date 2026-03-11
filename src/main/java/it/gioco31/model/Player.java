@@ -14,6 +14,7 @@ public final class Player implements Serializable {
     private int lives;
     private boolean eliminated;
     private boolean joined;
+    private boolean spectating;
 
     public Player(String name, int lives) {
         setName(name);
@@ -46,6 +47,9 @@ public final class Player implements Serializable {
 
     public boolean isJoined() { return joined; }
     public void setJoined(boolean joined) { this.joined = joined; }
+
+    public boolean isSpectating() { return spectating; }
+    public void setSpectating(boolean spectating) { this.spectating = spectating; }
 
     public static final class BestSuitScore {
         private final Suit suit;   // null se mano vuota

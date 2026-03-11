@@ -93,11 +93,6 @@ public class JoinRoomServlet extends HttpServlet {
             }
         }
 
-        if (room.state().getPhase() != Phase.WAITING_FOR_PLAYERS) {
-            forwardJoinWithError(req, resp, "Partita già iniziata: non è possibile entrare ora.");
-            return;
-        }
-
         String token = UUID.randomUUID().toString();
         Integer idx;
 
@@ -126,7 +121,19 @@ public class JoinRoomServlet extends HttpServlet {
                 return;
             }
 
+            Phase currentPhase = room.state().getPhase();
+            boolean inProgress = (currentPhase == Phase.PLAYING || currentPhase == Phase.KNOCK_CALLED);
+
             me.setJoined(true);
+            if (inProgress) {
+                // Entra come spettatore: parteciperà dalla prossima partita
+                me.setEliminated(true);
+                me.setSpectating(true);
+                me.setLives(0);
+            } else {
+                me.setEliminated(false);
+                me.setSpectating(false);
+            }
             room.bindToken(token, idx);
             room.touch();
         } finally {

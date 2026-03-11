@@ -19,6 +19,7 @@ import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,7 +71,7 @@ public class RoomEndpoint {
             return;
         }
 
-        String[] parts = msg.split(":");
+        String[] parts = msg.split(":", 3);
         if (parts.length < 2 || !"ACTION".equals(parts[0])) return;
 
         room.lock().lock();
@@ -166,6 +167,8 @@ public class RoomEndpoint {
     }
 
     private void restartGame(GameRoom room, GameState s) {
+        int nextDealer = s.getNextMatchDealerIndex();
+
         GameLifecycle.resetMatchState(s);
         int joined = GameLifecycle.preparePlayersForNewMatch(s);
 
@@ -174,7 +177,9 @@ public class RoomEndpoint {
             return;
         }
 
-        s.setDealerIndex(0);
+        s.setDealerIndex(nextDealer);
+        // Avanza il dealer per la partita successiva
+        s.setNextMatchDealerIndex(GameLifecycle.nextActiveFrom(s, nextDealer));
         room.engine().startRound(s);
     }
 
@@ -285,19 +290,22 @@ public class RoomEndpoint {
     }
 
     private String buildStateJson(GameState s, int viewerIndex) {
+        List<Player> players = s.getPlayers();
         boolean viewerEliminated = false;
-        if (viewerIndex >= 0 && viewerIndex < s.getPlayers().size()) {
-            Player v = s.getPlayers().get(viewerIndex);
+        boolean viewerSpectating = false;
+        if (viewerIndex >= 0 && viewerIndex < players.size()) {
+            Player v = players.get(viewerIndex);
             viewerEliminated = (v != null && v.isEliminated());
+            viewerSpectating = (v != null && v.isSpectating());
         }
 
         boolean inPlay = (s.getPhase() == Phase.PLAYING || s.getPhase() == Phase.KNOCK_CALLED);
 
         int handViewIndex = (viewerEliminated && inPlay) ? s.getCurrentIndex() : viewerIndex;
-        if (handViewIndex < 0 || handViewIndex >= s.getPlayers().size()) handViewIndex = viewerIndex;
-        if (handViewIndex < 0 || handViewIndex >= s.getPlayers().size()) handViewIndex = 0;
+        if (handViewIndex < 0 || handViewIndex >= players.size()) handViewIndex = viewerIndex;
+        if (handViewIndex < 0 || handViewIndex >= players.size()) handViewIndex = 0;
 
-        Player handOwner = s.getPlayers().get(handViewIndex);
+        Player handOwner = players.get(handViewIndex);
 
         Card viewPending = null;
         if (inPlay) {
@@ -317,6 +325,7 @@ public class RoomEndpoint {
         sb.append("\"discardTop\":").append(cardJson(s.getDiscard().peek())).append(",");
 
         sb.append("\"viewerEliminated\":").append(viewerEliminated).append(",");
+        sb.append("\"viewerSpectating\":").append(viewerSpectating).append(",");
         sb.append("\"handViewIndex\":").append(handViewIndex).append(",");
 
         sb.append("\"viewHand\":[");
@@ -330,8 +339,9 @@ public class RoomEndpoint {
         sb.append("\"viewPending\":").append(cardJson(viewPending)).append(",");
 
         sb.append("\"players\":[");
-        for (int i = 0; i < s.getPlayers().size(); i++) {
-            Player p = s.getPlayers().get(i);
+        GameState.Notice viewerNotice = s.getNoticeForPlayer(viewerIndex);
+        for (int i = 0; i < players.size(); i++) {
+            Player p = players.get(i);
             if (i > 0) sb.append(",");
 
             sb.append("{");
@@ -339,6 +349,7 @@ public class RoomEndpoint {
             sb.append("\"name\":").append(jsonStr(p.getName())).append(",");
             sb.append("\"lives\":").append(p.getLives()).append(",");
             sb.append("\"eliminated\":").append(p.isEliminated()).append(",");
+            sb.append("\"spectating\":").append(p.isSpectating()).append(",");
             sb.append("\"joined\":").append(p.isJoined()).append(",");
             sb.append("\"cardCount\":").append(p.getHand().size()).append(",");
 
@@ -350,9 +361,8 @@ public class RoomEndpoint {
             sb.append("\"pendingDraw\":").append(cardJson(pendingForViewer)).append(",");
 
             if (i == viewerIndex) {
-                GameState.Notice n = s.getNoticeForPlayer(viewerIndex);
-                sb.append("\"noticeId\":").append(n != null ? n.getId() : "null").append(",");
-                sb.append("\"noticeMsg\":").append(n != null ? jsonStr(n.getMessage()) : "null");
+                sb.append("\"noticeId\":").append(viewerNotice != null ? viewerNotice.getId() : "null").append(",");
+                sb.append("\"noticeMsg\":").append(viewerNotice != null ? jsonStr(viewerNotice.getMessage()) : "null");
             } else {
                 sb.append("\"noticeId\":null,");
                 sb.append("\"noticeMsg\":null");

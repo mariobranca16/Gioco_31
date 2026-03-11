@@ -407,24 +407,35 @@ function renderPlayers(players, currentIndex){
     root.innerHTML = "";
 
     players.forEach((p, i) => {
+        const isSpectating = !!p.spectating;
+        const isElim = !!p.eliminated && !isSpectating;
+        const isCurrent = (i === currentIndex);
+
         const div = document.createElement("div");
-        div.className = "p" + (p.eliminated ? " elim" : "") + (i === currentIndex ? " current" : "");
+        let cls = "p";
+        if (isSpectating) cls += " spectating";
+        else if (isElim) cls += " elim";
+        if (isCurrent) cls += " current";
+        div.className = cls;
 
         const name = escapeHtml(p.name ?? "—");
         const lives = (p.lives ?? 0);
 
-        // ✅ Qui: NIENTE “Carte:” e cuori sempre sotto
-        div.innerHTML = `
-          <div class="badge">${i+1}</div>
-          <div class="info">
-            <div class="name" title="${name}">${name}</div>
-            <div class="sub">
-              <span class="hearts" title="${lives} vite">${hearts(lives)}</span>
-              ${p.eliminated ? `<span class="state">Eliminato</span>` : ""}
-            </div>
-          </div>
-          <div class="tag ${i === currentIndex ? "turn" : ""}">${i === currentIndex ? "Turno" : "In attesa"}</div>
-        `;
+        let stateLabel = "";
+        if (isSpectating) stateLabel = '<span class="state">Spettatore</span>';
+        else if (isElim) stateLabel = '<span class="state">Eliminato</span>';
+
+        const tagClass = isCurrent ? "tag turn" : "tag";
+        const tagText  = isCurrent ? "Turno" : "In attesa";
+
+        div.innerHTML = '<div class="badge">' + (i+1) + '</div>'
+            + '<div class="info">'
+            + '<div class="name" title="' + name + '">' + name + '</div>'
+            + '<div class="sub">'
+            + '<span class="hearts" title="' + lives + ' vite">' + hearts(lives) + '</span>'
+            + stateLabel
+            + '</div></div>'
+            + '<div class="' + tagClass + '">' + tagText + '</div>';
 
         root.appendChild(div);
     });
@@ -562,7 +573,7 @@ function hideWinnerOverlay(){
     if (ov) ov.style.display = "none";
 }
 
-function renderBanner(phase, viewerIndex, currentIndex, players){
+function renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectating){
     const statusTxt = document.getElementById("statusTxt");
     const statusPill = document.getElementById("statusPill");
 
@@ -584,6 +595,10 @@ function renderBanner(phase, viewerIndex, currentIndex, players){
         title = "Partita terminata";
         sub = "È stato dichiarato un vincitore.";
         pillText = "GAME OVER";
+    } else if (viewerSpectating) {
+        title = "Sei uno spettatore";
+        sub = "Stai guardando la partita in corso. Entrerai a giocare nella prossima partita.";
+        pillText = "SPETTATORE";
     } else if (meTurn) {
         title = "È il tuo turno";
         sub = (phase === "KNOCK_CALLED")
@@ -593,7 +608,7 @@ function renderBanner(phase, viewerIndex, currentIndex, players){
         pillClass = "pill turn";
     } else {
         title = "In attesa";
-        sub = `Sta giocando: ${curName}`;
+        sub = "Sta giocando: " + curName;
         pillText = "ATTENDI";
     }
 
@@ -661,8 +676,10 @@ function render(){
     }
     prevAnimState = curSnap;
 
+    const viewerSpectating = !!lastState.viewerSpectating;
+
     renderPlayers(players, currentIndex);
-    renderBanner(phase, viewerIndex, currentIndex, players);
+    renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectating);
 
     const viewerObj = (viewerIndex >= 0 && viewerIndex < players.length) ? players[viewerIndex] : null;
 
@@ -680,9 +697,13 @@ function render(){
 
     const handTitle = document.getElementById("handTitle");
     if (handTitle) {
-        handTitle.textContent = spectator
-            ? `Mano di ${handObj?.name ?? "—"} (spettatore)`
-            : "La tua mano";
+        if (viewerSpectating) {
+            handTitle.textContent = "Mano di " + (handObj?.name ?? "—") + " (stai guardando)";
+        } else if (spectator) {
+            handTitle.textContent = "Mano di " + (handObj?.name ?? "—") + " (spettatore)";
+        } else {
+            handTitle.textContent = "La tua mano";
+        }
     }
 
     const inPlay = (phase === "PLAYING" || phase === "KNOCK_CALLED");

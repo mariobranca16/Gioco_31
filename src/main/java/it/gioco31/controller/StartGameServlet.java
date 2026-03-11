@@ -73,6 +73,10 @@ public class StartGameServlet extends HttpServlet {
             }
 
             room.engine().startRound(room.state());
+            // Imposta il dealer per la prossima partita (rotazione turni)
+            int firstDealer = room.state().getDealerIndex();
+            room.state().setNextMatchDealerIndex(
+                    GameLifecycle.nextActiveFrom(room.state(), firstDealer));
             room.touch();
         } finally {
             room.lock().unlock();
