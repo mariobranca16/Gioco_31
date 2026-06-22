@@ -28,7 +28,7 @@ Al termine di ogni round, il giocatore con il punteggio più basso perde una vit
 - gestione delle eliminazioni e del vincitore finale
 - possibilità di rigiocare al termine della partita
 
-## Come avviare
+## Come avviare il gioco
 
 Prerequisiti: JDK 17 o superiore, Apache Tomcat 10 o superiore (necessario per il namespace `jakarta.*`) e un browser con supporto ai WebSocket.
 
