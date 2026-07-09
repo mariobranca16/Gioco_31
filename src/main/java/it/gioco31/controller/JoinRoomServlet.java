@@ -1,7 +1,6 @@
 package it.gioco31.controller;
 
 import it.gioco31.GameConstants;
-import it.gioco31.model.Phase;
 import it.gioco31.model.Player;
 import it.gioco31.room.GameRoom;
 import it.gioco31.room.RoomRepository;
@@ -17,14 +16,12 @@ import java.util.UUID;
 @WebServlet("/join")
 public class JoinRoomServlet extends HttpServlet {
 
-    private static int parseSlots(String raw) {
-        int v = 4;
+    private static int parseClamped(String raw, int def, int min, int max) {
+        int v = def;
         if (raw != null) {
             try { v = Integer.parseInt(raw.trim()); } catch (NumberFormatException ignored) {}
         }
-        if (v < GameConstants.MIN_PLAYERS) v = GameConstants.MIN_PLAYERS;
-        if (v > GameConstants.MAX_PLAYERS) v = GameConstants.MAX_PLAYERS;
-        return v;
+        return Math.max(min, Math.min(max, v));
     }
 
     private static void forwardJoinWithError(HttpServletRequest req, HttpServletResponse resp, String msg)
@@ -56,8 +53,11 @@ public class JoinRoomServlet extends HttpServlet {
         GameRoom room;
 
         if ("create".equalsIgnoreCase(action)) {
-            int slots = parseSlots(req.getParameter("players"));
-            room = RoomRepository.createNewRoom(slots);
+            int slots = parseClamped(req.getParameter("players"), 4,
+                    GameConstants.MIN_PLAYERS, GameConstants.MAX_PLAYERS);
+            int lives = parseClamped(req.getParameter("lives"), GameConstants.DEFAULT_LIVES,
+                    GameConstants.MIN_LIVES, GameConstants.MAX_LIVES);
+            room = RoomRepository.createNewRoom(slots, lives);
             roomId = RoomRepository.normalizeRoomId(room.roomId());
 
         } else if ("join".equalsIgnoreCase(action)) {
@@ -94,35 +94,42 @@ public class JoinRoomServlet extends HttpServlet {
         }
 
         String token = UUID.randomUUID().toString();
-        Integer idx;
 
+        // Il forward alla JSP va fatto FUORI dal lock della stanza:
+        // qui si raccoglie solo l'esito.
+        String joinError = tryJoin(room, nameRaw.trim(), token);
+        if (joinError != null) {
+            forwardJoinWithError(req, resp, joinError);
+            return;
+        }
+
+        session.setAttribute("playerToken", token);
+        session.setAttribute("roomId", roomId);
+
+        resp.sendRedirect(req.getContextPath() + "/room?room=" + UrlUtil.enc(roomId));
+    }
+
+    /** Occupa uno slot per il giocatore. Ritorna null se ok, altrimenti il messaggio d'errore. */
+    private static String tryJoin(GameRoom room, String candidate, String token) {
         room.lock().lock();
         try {
-            String candidate = nameRaw.trim();
-
             for (Player p : room.state().getPlayers()) {
                 if (p.isJoined() && p.getName() != null && p.getName().equalsIgnoreCase(candidate)) {
-                    forwardJoinWithError(req, resp, "Nome già utilizzato nella room.");
-                    return;
+                    return "Nome già utilizzato nella room.";
                 }
             }
 
-            idx = findFreeSlot(room);
-            if (idx < 0) {
-                forwardJoinWithError(req, resp, "Room piena.");
-                return;
-            }
+            int idx = findFreeSlot(room);
+            if (idx < 0) return "Room piena.";
 
             Player me = room.state().getPlayers().get(idx);
             try {
                 me.setName(candidate);
             } catch (IllegalArgumentException ex) {
-                forwardJoinWithError(req, resp, ex.getMessage());
-                return;
+                return ex.getMessage();
             }
 
-            Phase currentPhase = room.state().getPhase();
-            boolean inProgress = (currentPhase == Phase.PLAYING || currentPhase == Phase.KNOCK_CALLED);
+            boolean inProgress = room.state().getPhase().isInPlay();
 
             me.setJoined(true);
             if (inProgress) {
@@ -135,15 +142,12 @@ public class JoinRoomServlet extends HttpServlet {
                 me.setSpectating(false);
             }
             room.bindToken(token, idx);
-            room.touch();
+            room.state().addEvent(candidate
+                    + (inProgress ? " guarda la partita: entrerà dalla prossima." : " si è seduto al tavolo."));
+            return null;
         } finally {
             room.lock().unlock();
         }
-
-        session.setAttribute("playerToken", token);
-        session.setAttribute("roomId", roomId);
-
-        resp.sendRedirect(req.getContextPath() + "/room?room=" + UrlUtil.enc(roomId));
     }
 
     private static int findFreeSlot(GameRoom room) {

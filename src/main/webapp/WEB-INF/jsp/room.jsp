@@ -23,16 +23,19 @@
         StringBuilder out = new StringBuilder(s.length() + 8);
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
+            // switch classico: Jasper compila le JSP a un source level più basso di Java 14
             switch (c) {
-                case '\\' -> out.append("\\\\");
-                case '"'  -> out.append("\\\"");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> {
+                case '\\': out.append("\\\\"); break;
+                case '"':  out.append("\\\""); break;
+                case '\n': out.append("\\n"); break;
+                case '\r': out.append("\\r"); break;
+                case '\t': out.append("\\t"); break;
+                // impedisce di chiudere il blocco <script> dall'interno della stringa
+                case '<':  out.append("\\u003c"); break;
+                case '>':  out.append("\\u003e"); break;
+                default:
                     if (c < 0x20) out.append(String.format("\\u%04x", (int)c));
                     else out.append(c);
-                }
             }
         }
         return out.toString();
@@ -46,9 +49,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Gioco del 31</title>
 
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=1">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=1">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/room.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Open+Sans:wght@400;500;700;800&display=swap">
+
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=5">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=6">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/room.css?v=13">
 </head>
 
 <body>
@@ -65,7 +72,7 @@
         <b><span id="statusTxt">—</span></b>
     </div>
 
-    <div class="pill" id="statusPill">—</div>
+    <div class="pill" id="timerPill" title="Tempo rimasto per il turno">—</div>
 </header>
 
 <div class="wrap">
@@ -90,6 +97,20 @@
             <h2>Tavolo</h2>
 
             <div class="tableTopRow">
+
+                <!-- AREA SINISTRA: Invito -->
+                <div class="leftArea">
+                    <div class="pile sidePile invitePile">
+                        <h2>Invita</h2>
+
+                        <div class="btnRow inviteRow">
+                            <input id="inviteLink" class="inviteInput" readonly value=""/>
+                            <button class="primary" type="button" onclick="copyInvite()">Copia link</button>
+                        </div>
+                    </div>
+
+                    <div class="pill" id="statusPill">—</div>
+                </div>
 
                 <!-- AREA GIOCO (centrale): Pending + Mazzo + Scarti -->
                 <div class="playArea">
@@ -143,11 +164,11 @@
                         <div class="btnRow cmdRow">
                             <button id="btnKnock" class="primary" type="button" onclick="sendAction('knock')">Bussa</button>
 
-                            <form method="post" action="<%= h(ctx) %>/start" style="margin:0;">
+                            <form method="post" action="<%= h(ctx) %>/start">
                                 <button id="btnStart" class="ok" type="submit" disabled>Inizia gioco</button>
                             </form>
 
-                            <form method="post" action="<%= h(ctx) %>/leave" style="margin:0;">
+                            <form method="post" action="<%= h(ctx) %>/leave">
                                 <button class="danger" type="submit">Esci</button>
                             </form>
                         </div>
@@ -156,12 +177,9 @@
 
                         <div class="sideDivider"></div>
 
-                        <h2>Invita</h2>
+                        <h2>Al tavolo</h2>
 
-                        <div class="btnRow inviteRow">
-                            <input id="inviteLink" class="inviteInput" readonly value=""/>
-                            <button class="primary" type="button" onclick="copyInvite()">Copia link</button>
-                        </div>
+                        <div id="eventFeed" class="eventFeed" aria-live="polite"></div>
                     </div>
                 </div>
             </div>
@@ -169,15 +187,27 @@
             <hr class="hr">
 
             <div class="tableBottomRow">
-                <h2 id="handTitle" style="margin-top:0;">La tua mano</h2>
+                <h2 id="handTitle">La tua mano</h2>
 
                 <div class="handRow" id="handRow"></div>
 
                 <div class="handInfoBelow">
-                    <div class="muted">Player: <b><span id="meTxt">—</span></b></div>
-                    <div class="muted">Vite: <b><span id="livesTxt">—</span></b></div>
-                    <div class="muted">Miglior seme: <b><span id="bestSuitTxt">—</span></b></div>
+                    <div class="muted">Player: <b><span id="meTxt">-</span></b></div>
+                    <div class="muted">Vite: <b><span id="livesTxt">-</span></b></div>
+                    <div class="muted">Miglior seme: <b><span id="bestSuitTxt">-</span></b></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FINE ROUND: MANI RIVELATE -->
+    <div id="revealOverlay" class="modalOverlay" role="dialog" aria-modal="true" aria-live="polite">
+        <div class="modalCard revealCard">
+            <h3 class="modalTitle">Fine round</h3>
+            <p id="revealMsg" class="modalMsg">—</p>
+            <div id="revealHands" class="revealHands"></div>
+            <div class="modalActions">
+                <button class="ok" type="button" onclick="closeReveal()">OK</button>
             </div>
         </div>
     </div>
@@ -211,7 +241,7 @@
         window.__ROOM_ID__ = "<%= js(roomId) %>";
         window.__CTX__ = "<%= js(ctx) %>";
     </script>
-    <script defer src="<%= h(ctx) %>/js/room.js?v=1"></script>
+    <script defer src="<%= h(ctx) %>/js/room.js?v=9"></script>
 
     <% } %>
 </div>

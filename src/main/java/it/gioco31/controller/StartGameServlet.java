@@ -46,42 +46,39 @@ public class StartGameServlet extends HttpServlet {
             return;
         }
 
-        room.lock().lock();
-        try {
-            if (room.state().getPhase() != Phase.WAITING_FOR_PLAYERS) {
-                req.setAttribute("error", "Il gioco è già iniziato.");
-                req.setAttribute("roomId", roomId);
-                req.getRequestDispatcher("/WEB-INF/jsp/room.jsp").forward(req, resp);
-                return;
-            }
-
-            if (myIdx != 0) {
-                req.setAttribute("error", "Solo il creatore della stanza può avviare il gioco.");
-                req.setAttribute("roomId", roomId);
-                req.getRequestDispatcher("/WEB-INF/jsp/room.jsp").forward(req, resp);
-                return;
-            }
-
-            GameLifecycle.resetMatchState(room.state());
-            int joined = GameLifecycle.preparePlayersForNewMatch(room.state());
-
-            if (joined < 2) {
-                req.setAttribute("error", "Servono almeno 2 giocatori per iniziare.");
-                req.setAttribute("roomId", roomId);
-                req.getRequestDispatcher("/WEB-INF/jsp/room.jsp").forward(req, resp);
-                return;
-            }
-
-            room.engine().startRound(room.state());
-            // Imposta il dealer per la prossima partita (rotazione turni)
-            int firstDealer = room.state().getDealerIndex();
-            room.state().setNextMatchDealerIndex(
-                    GameLifecycle.nextActiveFrom(room.state(), firstDealer));
-            room.touch();
-        } finally {
-            room.lock().unlock();
+        // Il forward alla JSP va fatto FUORI dal lock della stanza:
+        // qui si raccoglie solo l'esito.
+        String startError = tryStart(room, token);
+        if (startError != null) {
+            req.setAttribute("error", startError);
+            req.setAttribute("roomId", roomId);
+            req.getRequestDispatcher("/WEB-INF/jsp/room.jsp").forward(req, resp);
+            return;
         }
 
         resp.sendRedirect(req.getContextPath() + "/room?room=" + UrlUtil.enc(roomId));
+    }
+
+    /** Avvia la partita. Ritorna null se ok, altrimenti il messaggio d'errore. */
+    private static String tryStart(GameRoom room, String token) {
+        room.lock().lock();
+        try {
+            if (room.state().getPhase() != Phase.WAITING_FOR_PLAYERS) {
+                return "Il gioco è già iniziato.";
+            }
+
+            if (!room.isHost(token)) {
+                return "Solo il creatore della stanza può avviare il gioco.";
+            }
+
+            if (!GameLifecycle.startMatch(room.state(), room.engine())) {
+                return "Servono almeno 2 giocatori per iniziare.";
+            }
+
+            room.touch();
+            return null;
+        } finally {
+            room.lock().unlock();
+        }
     }
 }

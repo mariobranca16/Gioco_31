@@ -3,53 +3,58 @@
    ========================= */
 
 header{
-    display:flex;
+    /* titolo | scritte centrali | countdown nell'angolo destro */
+    display:grid;
+    grid-template-columns:auto 1fr auto;
     align-items:center;
-    justify-content:space-between;
     gap:12px;
 
     position:sticky;
     top:0;
     z-index:10;
 
-    padding:calc(14px * var(--S)) calc(18px * var(--S));
-    border-bottom:1px solid rgba(255,255,255,.12);
+    padding:10px 20px;
+    border-bottom:1px solid rgba(0,0,0,.30);
 
-    backdrop-filter:blur(6px);
-    background:rgba(10,15,28,.70);
+    background: var(--felt-edge);
+    color: var(--cream-text);
+    /* filo d'oro sotto il bordo: il taglio dorato dell'astuccio di carte */
+    box-shadow:
+            0 1px 0 rgba(200,147,52,.60),
+            0 2px 10px rgba(8,22,14,.35);
 }
 
 header h1{
     margin:0;
     line-height:1;
 
-    font-size:calc(20px * var(--S));
-    font-weight:1000;
-    letter-spacing:.7px;
+    font-family: var(--serif);
+    font-size:calc(22px * var(--S));
+    font-weight:700;
+    letter-spacing:1.5px;
 
-    background:linear-gradient(180deg, #ffffff, rgba(77,212,255,.95));
-    -webkit-background-clip:text;
-    background-clip:text;
-    color:transparent;
-
-    text-shadow:
-            0 1px 10px rgba(77,212,255,.14),
-            0 8px 22px rgba(0,0,0,.28);
+    color:#d8ac4e;
+    text-shadow: 0 1px 0 rgba(0,0,0,.35);
 }
 
 header .metaLine{
     display:flex;
     align-items:center;
-    justify-content:flex-end;
+    justify-content:center;
     gap:8px;
     flex-wrap:wrap;
 
-    color:var(--muted);
+    color:rgba(241,233,212,.72);
     font-size:calc(13px * var(--S));
 }
 
+header .metaLine b{
+    color: var(--cream-text);
+    font-weight:700;
+}
+
 header .metaLine .sep{
-    opacity:.65;
+    opacity:.55;
 }
 
 /* =========================
@@ -65,28 +70,28 @@ header .metaLine .sep{
     align-items: stretch;
 
     overflow: hidden;
-    padding:12px;
-    margin-top:14px;
+    padding:8px 10px;
+    margin-top:10px;
 
-    border:1px solid var(--line);
+    /* zona d'ombra sul panno, non un pannello */
+    border:1px solid rgba(0,0,0,.22);
     border-radius: var(--r);
-    background: rgba(18,26,43,.65);
-    box-shadow: var(--shadow);
+    background: rgba(14,28,18,.14);
 }
 
 .grid{
     display:grid;
     grid-template-columns:1fr;
-    gap:14px;
-    margin-top:14px;
+    gap:10px;
+    margin-top:10px;
 }
 
 .panel > h2,
 .tableBottomRow > h2{
-    margin-bottom:10px;
+    margin-bottom:6px;
     padding-left:8px;
 
-    font-size:18px;
+    font-size:17px;
     letter-spacing:.25px;
 }
 
@@ -105,12 +110,14 @@ header .metaLine .sep{
     min-width: 0;
     max-width: 220px;
 
-    padding:10px 12px;
+    padding:8px 10px;
     padding-right:74px;
 
-    border-radius:14px;
-    border:1px solid var(--line);
-    background:rgba(15,22,38,.65);
+    border-radius:8px;
+    border:1px solid var(--paper-3);
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 1px 3px rgba(14,28,18,.25);
 
     overflow:hidden;
     transition:transform .08s ease, border-color .15s ease, box-shadow .15s ease;
@@ -118,21 +125,26 @@ header .metaLine .sep{
 
 .p.current{
     transform:translateY(-1px);
-    border-color:rgba(77,212,255,.7);
+    border-color: var(--gold-dark);
     box-shadow:
-            0 0 0 2px rgba(77,212,255,.18) inset,
-            0 12px 18px rgba(0,0,0,.18);
+            0 0 0 2px rgba(200,147,52,.38),
+            0 4px 10px rgba(14,28,18,.25);
 }
 
 .p.elim{
-    opacity:.45;
-    filter:saturate(.6);
+    opacity:.5;
+    filter:saturate(.5);
 }
 
 .p.spectating{
-    opacity:.7;
-    filter:saturate(.5) sepia(.2);
+    opacity:.8;
+    filter:saturate(.7);
     border-style:dashed;
+    border-color: rgba(47,93,138,.45);
+}
+
+.p.spectating .state{
+    color: var(--blue);
 }
 
 .p .badge{
@@ -144,11 +156,14 @@ header .metaLine .sep{
 
     flex:0 0 auto;
 
-    border-radius:12px;
-    background:rgba(77,212,255,.16);
-    border:1px solid rgba(77,212,255,.28);
+    /* gettone segnaposto */
+    border-radius:50%;
+    background: var(--paper-2);
+    border:1px solid var(--paper-3);
 
-    font-weight:900;
+    font-family: var(--serif);
+    font-weight:700;
+    color: var(--ink);
 }
 
 .p .info{
@@ -158,7 +173,7 @@ header .metaLine .sep{
 }
 
 .p .name{
-    font-weight:800;
+    font-weight:700;
     font-size:14px;
 
     white-space:nowrap;
@@ -173,7 +188,7 @@ header .metaLine .sep{
     align-items:center;
     gap:8px;
 
-    color:var(--muted);
+    color:var(--ink-soft);
     font-size:12px;
 
     min-width:0;
@@ -181,7 +196,7 @@ header .metaLine .sep{
 
 .hearts{
     flex:0 0 auto;
-    color:#ff6b86;
+    color: var(--brick);
     letter-spacing:1px;
     font-size:12px;
 }
@@ -199,21 +214,147 @@ header .metaLine .sep{
     right:8px;
     top:8px;
 
-    padding:3px 7px;
+    padding:3px 8px;
 
     border-radius:999px;
-    border:1px solid var(--line);
-    background:rgba(0,0,0,.12);
+    border:1px solid var(--paper-3);
+    background: var(--paper-2);
 
-    color:var(--muted);
+    color:var(--ink-soft);
     font-size:10px;
 
     white-space:nowrap;
 }
 
 .tag.turn{
-    color:var(--accent);
-    border-color:rgba(77,212,255,.35);
+    color: var(--ink);
+    border-color: var(--gold-dark);
+    background: var(--gold);
+    font-weight:700;
+}
+
+/* =========================
+   TIMER DI TURNO
+   ========================= */
+
+#timerPill{
+    /* visibility (non display): riserva lo spazio e le scritte centrali non saltano */
+    visibility:hidden;
+    min-width:56px;
+    text-align:center;
+
+    /* sans con cifre tabellari: il conto alla rovescia non deve ballare */
+    font-family:var(--sans);
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+}
+
+#timerPill.on{ visibility:visible; }
+
+#timerPill.low{
+    color:#f7ecdc;
+    border-color:var(--brick-dark);
+    background:var(--brick);
+}
+
+/* =========================
+   AL TAVOLO — registro mosse
+   ========================= */
+
+.eventFeed{
+    /* riempie l'altezza libera del pannello, poi si scorre */
+    flex:1 1 78px;
+    min-height:78px;
+    overflow-y:auto;
+
+    text-align:left;
+    font-size:11px;
+    line-height:1.35;
+
+    padding:2px 2px 0;
+}
+
+.eventFeed::-webkit-scrollbar{ width:8px; }
+.eventFeed::-webkit-scrollbar-thumb{
+    background:rgba(46,42,34,.25);
+    border-radius:999px;
+}
+
+.evt{
+    padding:5px 4px;
+    border-bottom:1px dashed var(--line);
+    color:var(--ink);
+}
+.evt:last-child{ border-bottom:none; }
+
+.evtTime{
+    color:var(--ink-soft);
+    font-variant-numeric:tabular-nums;
+    margin-right:4px;
+}
+
+/* =========================
+   FINE ROUND — mani rivelate
+   ========================= */
+
+.revealCard{ max-width:640px; }
+
+.revealHands{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    justify-content:center;
+    margin-top:12px;
+}
+
+.revealHand{
+    border:1px solid var(--paper-3);
+    border-radius:8px;
+    background:var(--paper-2);
+    padding:8px 10px;
+    text-align:center;
+}
+
+.revealHand.lost{
+    border-color:rgba(178,59,39,.55);
+}
+
+.revealName{
+    font-weight:700;
+    font-size:13px;
+    margin-bottom:6px;
+}
+
+.revealScore{
+    font-family:var(--serif);
+    color:var(--brick);
+    margin-left:4px;
+}
+
+.revealBadge{
+    display:inline-block;
+    margin-left:6px;
+    padding:1px 7px;
+    border-radius:999px;
+    background:var(--brick);
+    color:#f7ecdc;
+    font-size:10px;
+    font-weight:700;
+    vertical-align:middle;
+}
+
+.revealBadge.out{ background:var(--ink); }
+
+.revealCards{
+    display:flex;
+    gap:6px;
+    justify-content:center;
+}
+
+.revealCards img{
+    height:64px;
+    border-radius:4px;
+    box-shadow:0 1px 3px rgba(14,28,18,.30);
 }
 
 /* =========================
@@ -224,15 +365,22 @@ header .metaLine .sep{
     --topMax:170px;
     --topTitle:18px;
     --topCardW:clamp(135px, 14vw, 170px);
-    --topCardH:205px;
+    /* altezza legata al viewport: mazzo, scarti e mano devono stare in una schermata */
+    --topCardH:clamp(140px, 24vh, 205px);
+
+    /* mazzo/scarti: leggermente più grandi del pending, quasi fino alla linea */
+    --tallMax:195px;
+    --tallCardW:clamp(150px, 16vw, 195px);
+    --tallCardH:clamp(155px, 27vh, 230px);
 
     --playGap:20px;
-    --sideW:180px;
+    --sideW:265px;
+    --leftW:210px;
     --colGap:12px;
 
     display:grid;
     grid-template-columns:1fr max-content 1fr;
-    grid-template-areas:"ghost play side";
+    grid-template-areas:"left play side";
     column-gap:var(--colGap);
     align-items:start;
 
@@ -244,10 +392,17 @@ header .metaLine .sep{
     line-height:1;
 }
 
-.tableTopRow::before{
-    content:"";
-    grid-area:ghost;
-    width:var(--sideW);
+.tableTopRow .leftArea{
+    grid-area:left;
+    /* nella colonna vuota di sinistra, staccato dal bordo */
+    justify-self:center;
+    /* centrato in verticale rispetto all'area di gioco */
+    align-self:center;
+
+    width:var(--leftW);
+
+    display:flex;
+    flex-direction:column;
 }
 
 .tableTopRow .playArea{
@@ -257,19 +412,25 @@ header .metaLine .sep{
     justify-content:center;
     align-items:flex-start;
     gap:var(--playGap);
-
-    transform:translateX(calc(-1 * (var(--topMax) + var(--playGap)) / 2));
 }
 
-.tableTopRow .playArea > #pendingWrap,
-.tableTopRow .playArea > .pileTall{
+.tableTopRow .playArea > #pendingWrap{
     flex:0 0 var(--topMax);
     max-width:var(--topMax);
 }
 
+.tableTopRow .playArea > .pileTall{
+    flex:0 0 var(--tallMax);
+    max-width:var(--tallMax);
+}
+
 .tableTopRow .sideArea{
     grid-area:side;
-    justify-self:start;
+    justify-self:end;
+    /* staccato dal bordo destro del pannello */
+    margin-right:18px;
+    /* alto quanto l'area di gioco: il registro guadagna spazio */
+    align-self:stretch;
 
     width:var(--sideW);
 
@@ -277,7 +438,17 @@ header .metaLine .sep{
     flex-direction:column;
     gap:0;
 
-    --sideBtnW:150px;
+    /* larghezza fissa dei bottoni comando, solo nella colonna destra */
+    --sideBtnW:230px;
+}
+
+.tableTopRow .sideArea .sidePile{
+    flex:1 1 auto;
+    min-height:0;
+}
+
+.sideArea .sidePile button{
+    width:var(--sideBtnW);
 }
 
 /* =========================
@@ -286,7 +457,7 @@ header .metaLine .sep{
 
 .pileTall{
     width:100%;
-    max-width:var(--topMax);
+    max-width:var(--tallMax);
 
     margin:0;
     padding-left:10px;
@@ -299,10 +470,11 @@ header .metaLine .sep{
     margin-bottom:6px;
 
     text-align:center;
+    font-family: var(--serif);
     font-size:var(--topTitle);
-    font-weight:1000;
-    letter-spacing:.25px;
-    color:var(--text);
+    font-weight:700;
+    letter-spacing:.3px;
+    color:var(--ink);
 }
 
 .pileTall .title::after{
@@ -310,21 +482,21 @@ header .metaLine .sep{
     display:block;
 
     width:70%;
-    height:1px;
+    height:0;
     margin:6px auto 0;
 
-    background:rgba(255,255,255,.12);
+    border-top:1px dashed var(--line);
 }
 
 .pileTall .cardBox.tall{
-    width:var(--topCardW);
+    width:var(--tallCardW);
     max-width:100%;
-    height:var(--topCardH);
+    height:var(--tallCardH);
 
     margin:0 auto;
     padding:10px;
 
-    border-radius:18px;
+    border-radius:8px;
 
     display:flex;
     align-items:center;
@@ -334,18 +506,17 @@ header .metaLine .sep{
 }
 
 .pileTall .cardBox.tall img{
-    max-height:calc(var(--topCardH) - 25px);
+    max-height:calc(var(--tallCardH) - 25px);
     max-width:100%;
 
     object-fit:contain;
     display:block;
 
-    border-radius:12px;
-    opacity:.92;
+    border-radius:6px;
 }
 
 .pileTall button{
-    width:var(--topCardW);
+    width:var(--tallCardW);
     max-width:100%;
 
     margin:0 auto;
@@ -364,8 +535,6 @@ header .metaLine .sep{
    ========================= */
 
 .tableTopRow #pendingWrap{
-    display:flex !important;
-
     visibility:hidden;
     opacity:0;
     pointer-events:none;
@@ -382,7 +551,7 @@ header .metaLine .sep{
     max-width:var(--topMax);
 
     padding:10px;
-    border-radius:18px;
+    border-radius:10px;
 
     align-self:start;
     min-width:0;
@@ -396,19 +565,17 @@ header .metaLine .sep{
     margin:0;
 
     text-align:center;
+    font-family: var(--serif);
     font-size:16px;
-    font-weight:950;
-    letter-spacing:.25px;
-    color:var(--text);
+    font-weight:700;
+    letter-spacing:.3px;
+    color:var(--ink);
 }
 
 .pendingPile .cardBox.pendingCard{
     height:var(--topCardH);
 
-    border-radius:18px;
-    border:1px solid rgba(255,255,255,.14);
-    background:rgba(15,22,38,.62);
-    box-shadow:0 12px 18px rgba(0,0,0,.22);
+    border-radius:8px;
 
     padding:12px;
 
@@ -424,10 +591,7 @@ header .metaLine .sep{
     max-width:100%;
 
     object-fit:contain;
-    border-radius:12px;
-    opacity:.96;
-
-    filter:drop-shadow(0 10px 12px rgba(0,0,0,.35));
+    border-radius:6px;
 }
 
 .pendingPile .pendingActions{
@@ -445,6 +609,7 @@ header .metaLine .sep{
 
 .pendingPile .pendingActions button{
     white-space:nowrap;
+    height:30px;
     font-size:clamp(9px, 0.85vw, 11px);
     padding:0 7px;
     letter-spacing:0;
@@ -456,42 +621,75 @@ header .metaLine .sep{
 }
 
 /* =========================
-   BOX DESTRA: Comandi + Invita
+   BOX DESTRA: Comandi + registro
    ========================= */
 
 .sidePile{
     padding:8px;
-    border-radius:16px;
+    border-radius:10px;
 
-    border:1px solid rgba(255,255,255,.14);
-    background:rgba(15,22,38,.55);
-    box-shadow:0 12px 18px rgba(0,0,0,.22);
+    border:1px solid var(--paper-3);
+    background: var(--paper-2);
+    box-shadow: 0 1px 3px rgba(14,28,18,.18);
 
     display:flex;
     flex-direction:column;
-    gap:6px;
+    gap:5px;
+}
 
-    --sideBtnW:150px;
+/* riquadro Invita (colonna sinistra) */
+.invitePile{
+    width:100%;
+}
+
+/* pill di stato (TOCCA A TE / Turno di …) sotto il riquadro invito.
+   Colori "inchiostro su carta": la .pill base è pensata per l'header scuro. */
+.tableTopRow #statusPill{
+    align-self:center;
+    margin-top:10px;
+
+    padding:9px 20px;
+    font-size:15px;
+    font-weight:500;
+    text-align:center;
+
+    /* "Turno di <nome>": i nomi lunghi non devono sbordare */
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+
+    color:var(--ink);
+    border-color:var(--paper-3);
+    background:var(--paper-2);
+    box-shadow:0 1px 3px rgba(14,28,18,.18);
+}
+
+.tableTopRow #statusPill.turn{
+    color:var(--ink);
+    border-color:var(--gold-dark);
+    background:var(--gold);
+    font-weight:700;
 }
 
 .sidePile h2{
     margin:0;
 
     text-align:center;
+    font-family: var(--serif);
     font-size:17px;
-    font-weight:950;
+    font-weight:700;
     letter-spacing:.2px;
 }
 
 .sideDivider{
-    height:1px;
-    background:rgba(255,255,255,.12);
+    height:0;
+    border-top:1px dashed var(--line);
     margin:6px 0;
 }
 
 .sidePile button{
-    width:var(--sideBtnW);
-    height:34px;
+    width:100%;
+    height:30px;
 
     padding:0 10px;
     font-size:12px;
@@ -525,6 +723,7 @@ header .metaLine .sep{
 
 .sidePile .inviteInput{
     width:100%;
+    min-width:0;
     padding:9px 10px;
     font-size:11px;
 }
@@ -542,12 +741,12 @@ header .metaLine .sep{
 
     display:flex;
     justify-content:center;
-    gap:18px;
+    gap:14px;
 
     flex-wrap:nowrap;
     overflow-x:auto;
 
-    padding:6px 14px 8px;
+    padding:4px 10px 6px;
 
     scroll-snap-type:x mandatory;
     -webkit-overflow-scrolling:touch;
@@ -564,32 +763,33 @@ header .metaLine .sep{
 }
 
 .handRow::-webkit-scrollbar-thumb{
-    background:rgba(255,255,255,.14);
+    background:rgba(46,42,34,.28);
     border-radius:999px;
 }
 
 .handRow::-webkit-scrollbar-track{
-    background:rgba(0,0,0,.10);
+    background:rgba(46,42,34,.10);
     border-radius:999px;
 }
 
 .handCard{
     scroll-snap-align:center;
 
-    flex:0 0 200px;
-    height:200px;
+    flex:0 0 clamp(170px, 15vw, 200px);
+    height:clamp(150px, 22vh, 200px);
 
-    border-radius:20px;
-    border:1px solid rgba(255,255,255,.14);
-    background:rgba(15,22,38,.62);
-    box-shadow:0 12px 18px rgba(0,0,0,.22);
+    /* cartoncino avorio, come la carta stessa */
+    border-radius:10px;
+    border:1px solid var(--paper-3);
+    background: var(--card-face);
+    box-shadow: 0 2px 6px rgba(14,28,18,.22);
 
-    padding:10px;
+    padding:8px 10px;
 
     display:flex;
     flex-direction:column;
     justify-content:flex-start;
-    gap:8px;
+    gap:6px;
 
     position:relative;
     overflow:hidden;
@@ -599,7 +799,7 @@ header .metaLine .sep{
 
 .handCard:hover{
     transform:translateY(-1px);
-    border-color:rgba(77,212,255,.22);
+    border-color: var(--gold);
 }
 
 .handCard.selectable{
@@ -608,15 +808,15 @@ header .metaLine .sep{
 
 .handCard.selectable:hover{
     transform:translateY(-4px);
-    border-color:rgba(77,212,255,.35);
-    box-shadow:0 18px 28px rgba(0,0,0,.32);
+    border-color: var(--gold-dark);
+    box-shadow:0 8px 18px rgba(14,28,18,.30);
 }
 
 .handCard.selected{
-    border-color:rgba(53,226,138,.65);
+    border-color: var(--gold-dark);
     box-shadow:
-            0 0 0 2px rgba(53,226,138,.18) inset,
-            0 12px 18px rgba(0,0,0,.22);
+            0 0 0 2px rgba(200,147,52,.42),
+            0 4px 10px rgba(14,28,18,.22);
 }
 
 .handCard .top{
@@ -626,13 +826,18 @@ header .metaLine .sep{
 }
 
 .handCard .val{
-    color:var(--accent);
-    font-weight:900;
-    font-size:22px;
+    /* indice della carta, come stampato nell'angolo */
+    font-family: var(--serif);
+    color: var(--brick);
+    font-weight:700;
+    font-size:20px;
+    line-height:1;
 }
 
 .handCard .imgWrap{
-    height:120px;
+    height:clamp(80px, 12vh, 120px);
+    min-height:0;
+    flex:1 1 auto;
 
     display:flex;
     align-items:center;
@@ -640,23 +845,23 @@ header .metaLine .sep{
 }
 
 .handCard .imgWrap img{
-    max-height:120px;
-    max-width:180px;
+    max-height:100%;
+    max-width:100%;
 
     object-fit:contain;
 
-    border-radius:10px;
-    opacity:.95;
+    border-radius:6px;
 
-    filter:drop-shadow(0 10px 12px rgba(0,0,0,.35));
+    box-shadow: 0 2px 5px rgba(14,28,18,.25);
 }
 
 .handCard .muted{
     font-size:12px;
+    text-align:center;
 }
 
 .handInfoBelow{
-    margin-top:6px;
+    margin-top:4px;
 
     display:flex;
     gap:14px;
@@ -675,28 +880,30 @@ header .metaLine .sep{
 .winnerTitle{
     margin:0 0 10px 0;
 
-    font-size:18px;
-    font-weight:900;
-    letter-spacing:.3px;
+    font-size:14px;
+    font-weight:500;
+    letter-spacing:2.5px;
     text-transform:uppercase;
 
-    color:var(--muted);
+    color:var(--gold-dark);
 }
 
 .winnerName{
     margin:0;
 
+    font-family: var(--serif);
     font-size:38px;
-    font-weight:1000;
+    font-weight:700;
     letter-spacing:.2px;
     line-height:1.05;
+    color: var(--ink);
 }
 
 .winnerSub{
     margin:10px 0 0 0;
 
-    color:var(--muted);
-    line-height:1.35;
+    color:var(--ink-soft);
+    line-height:1.4;
 }
 
 /* =========================
@@ -706,16 +913,11 @@ header .metaLine .sep{
 @media (max-width: 1150px){
     .tableTopRow{
         grid-template-columns:1fr;
-        grid-template-areas:"play" "side";
+        grid-template-areas:"play" "side" "left";
         row-gap:14px;
     }
 
-    .tableTopRow::before{
-        content:none;
-    }
-
     .tableTopRow .playArea{
-        transform:none;
         flex-wrap:wrap;
         justify-content:center;
     }
@@ -724,19 +926,62 @@ header .metaLine .sep{
         width:100%;
         max-width:420px;
         justify-self:center;
+        align-self:auto;
+        margin-right:0;
+    }
+
+    /* impilato: il pannello non si allunga, serve di nuovo un tetto */
+    .eventFeed{
+        flex:0 1 auto;
+        max-height:120px;
+    }
+
+    .tableTopRow .leftArea{
+        width:100%;
+        max-width:420px;
+        justify-self:center;
     }
 }
 
 @media (max-width: 700px){
     header{
-        flex-direction:column;
-        align-items:flex-start;
+        grid-template-columns:1fr;
+        justify-items:start;
         gap:10px;
     }
 
     header .metaLine{
         line-height:1.35;
+        justify-content:flex-start;
     }
+
+    /* impilato: il timer nascosto non deve occupare una riga vuota */
+    #timerPill:not(.on){ display:none; }
+}
+
+/* Schermi bassi (laptop): tutto il tavolo deve stare in una schermata */
+@media (max-height: 820px){
+    header{ padding:6px 20px; }
+    header h1{ font-size:20px; }
+
+    .players{ margin-top:8px; padding:6px 8px; }
+    .p{ padding:6px 8px; padding-right:70px; }
+
+    .tableTopRow{
+        --topCardH:clamp(120px, 22vh, 170px);
+        --tallCardH:clamp(135px, 25vh, 195px);
+        --topTitle:15px;
+    }
+
+    .pileTall .cardBox.tall,
+    .pendingPile .cardBox.pendingCard{ padding:6px; }
+
+    .handCard{ height:clamp(130px, 20vh, 165px); }
+    /* la didascalia sotto la carta è ridondante con l'immagine */
+    .handCard .muted{ display:none; }
+
+    .eventFeed{ min-height:52px; }
+    .sidePile button{ height:28px; }
 }
 
 @media (max-width: 520px){
@@ -753,8 +998,7 @@ header .metaLine .sep{
         max-height:105px;
         max-width:160px;
 
-        border-radius:10px;
-        opacity:.95;
+        border-radius:6px;
     }
 }
 
@@ -776,36 +1020,12 @@ header .metaLine .sep{
     100% { transform: translateY(0) scale(1); }
 }
 
-@keyframes discardRING{
-    0%   { opacity: 0; transform: scale(.94); }
-    15%  { opacity: 1; transform: scale(1.02); }
-    65%  { opacity: .85; transform: scale(1.06); }
-    100% { opacity: 0; transform: scale(1.12); }
-}
-
 #discardPile.discardMega{
-    border-color:rgba(77,212,255,.75) !important;
+    border-color: var(--gold-dark) !important;
     box-shadow:
-            0 0 0 6px rgba(77,212,255,.18),
-            0 0 40px rgba(77,212,255,.35),
-            0 22px 40px rgba(0,0,0,.45) !important;
+            0 0 0 4px rgba(200,147,52,.32),
+            0 8px 20px rgba(14,28,18,.35) !important;
     animation:discardMEGA 1.05s cubic-bezier(.2,.9,.2,1);
-}
-
-#discardPile.discardMega::after{
-    content:"";
-    position:absolute;
-    inset:-10px;
-
-    border-radius:22px;
-    pointer-events:none;
-
-    background:
-            radial-gradient(closest-side, rgba(77,212,255,.22), transparent 70%),
-            conic-gradient(from 90deg, rgba(77,212,255,.0), rgba(77,212,255,.55), rgba(77,212,255,.0));
-
-    filter:blur(.2px);
-    animation:discardRING 1.05s ease-out;
 }
 
 /* =========================
@@ -818,8 +1038,9 @@ header .metaLine .sep{
 }
 
 .deckNum{
-    color:var(--accent);
-    font-weight:1000;
+    font-family: var(--serif);
+    color: var(--brick);
+    font-weight:700;
 }
 
 /* =========================
@@ -835,20 +1056,20 @@ header .metaLine .sep{
 
     transform:translate(-50%, -50%);
 
-    padding:10px 12px;
+    padding:9px 12px;
 
-    border-radius:14px;
-    border:2px solid rgba(77,212,255,.55);
-    background:rgba(10,15,28,.92);
+    border-radius:8px;
+    border:1px solid var(--gold-dark);
+    background: var(--paper);
 
-    box-shadow:
-            0 0 0 5px rgba(77,212,255,.18),
-            0 18px 40px rgba(0,0,0,.55);
+    box-shadow: 0 8px 24px rgba(14,28,18,.40);
 
-    font-weight:1000;
+    color: var(--ink);
+    font-weight:700;
     letter-spacing:.6px;
     text-transform:uppercase;
     white-space:nowrap;
+    font-size:13px;
 
     animation:fxLabelPop 1.2s ease forwards;
 }
@@ -865,15 +1086,13 @@ header .metaLine .sep{
     z-index:100000;
     pointer-events:none;
 
-    border-radius:18px;
+    border-radius:10px;
     overflow:hidden;
 
-    background:rgba(18,26,43,.92);
-    border:2px solid rgba(255,255,255,.18);
+    background: var(--card-face);
+    border:1px solid var(--paper-3);
 
-    box-shadow:
-            0 0 0 5px rgba(77,212,255,.14),
-            0 24px 55px rgba(0,0,0,.65);
+    box-shadow: 0 12px 30px rgba(14,28,18,.45);
 
     display:flex;
     align-items:center;
@@ -884,5 +1103,10 @@ header .metaLine .sep{
     width:100%;
     height:100%;
     object-fit:contain;
-    filter:drop-shadow(0 16px 22px rgba(0,0,0,.45));
+}
+
+/* L'esito del round decisivo deve restare visibile sopra l'overlay vincitore
+   (i .modalOverlay condividono z-index 9999 e il vincitore viene dopo nel DOM). */
+#revealOverlay{
+    z-index:10000;
 }

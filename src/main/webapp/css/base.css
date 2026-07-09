@@ -1,31 +1,80 @@
+/* =========================================================
+   Gioco del 31 — "al tavolo"
+   Fondo: panno verde biliardo sotto la lampada. Pannelli:
+   carta avorio, come i segnapunti scritti a matita.
+   I colori funzionali sono i quattro inchiostri delle carte
+   napoletane: nero (testo), vermiglio (vite/pericolo),
+   oro dei denari (turno/azione), blu di coppe e spade (info).
+   Tipografia: Lora per i titoli, Open Sans per il resto.
+   ========================================================= */
+
 :root{
-    --bg:#0b1220;
-    --text:#e6eaf2;
-    --muted:#9aa7bd;
-    --accent:#4dd4ff;
-    --danger:#ff5a7a;
-    --ok:#35e28a;
-    --line:rgba(255,255,255,.12);
-    --shadow: 0 10px 25px rgba(0,0,0,.35);
-    --r:18px;
+    /* il tavolo */
+    --felt:#21503c;
+    --felt-dark:#1a4231;
+    --felt-edge:#123227;
+
+    /* la carta */
+    --paper:#f5eedb;
+    --paper-2:#ecdfc4;
+    --paper-3:#d9c9a3;
+    --card-face:#fdf9ee;
+    /* incavo su cui poggiano mazzo, scarti e carta pescata */
+    --card-well:#e3d3ac;
+
+    /* i quattro inchiostri delle figure */
+    --ink:#2b2418;
+    --ink-soft:#6f5f47;
+    --brick:#b23b27;
+    --brick-dark:#8a2b1b;
+    --gold:#c89334;
+    --gold-dark:#9d7122;
+    --blue:#2f5d8a;
+    --blue-dark:#24476a;
+
+    --cream-text:#f3ecd6;
+
+    --line:rgba(43,36,24,.28);
+    --shadow: 0 1px 2px rgba(18,30,20,.22), 0 5px 14px rgba(18,30,20,.18);
+    --r:10px;
     --S: 1.20;
+
+    --serif:"Lora", Georgia, "Palatino Linotype", "Times New Roman", serif;
+    --sans:"Open Sans", "Segoe UI", Tahoma, Verdana, Arial, sans-serif;
 }
 
 *{ box-sizing:border-box; }
 
 body{
     margin:0;
-    color:var(--text);
-    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-    background: radial-gradient(1200px 700px at 50% 20%, #1a2a4a 0%, var(--bg) 55%);
+    color:var(--ink);
+    font-family: var(--sans);
+    /* luce dall'alto + vignetta ai bordi, come un tavolo sotto la lampada;
+       sotto, una trama incrociata appena percettibile: il tessuto del panno */
+    background:
+        radial-gradient(1100px 600px at 50% -5%, rgba(255,251,235,.09), transparent 60%),
+        radial-gradient(1600px 1000px at 50% 60%, transparent 42%, rgba(8,22,14,.48) 100%),
+        repeating-linear-gradient(45deg, rgba(255,255,255,.014) 0 2px, transparent 2px 4px),
+        repeating-linear-gradient(-45deg, rgba(0,0,0,.020) 0 2px, transparent 2px 4px),
+        var(--felt);
+    background-attachment: fixed;
     min-height:100vh;
     font-size: calc(16px * var(--S));
 }
 
-.muted{ color:var(--muted); }
+.muted{ color:var(--ink-soft); }
 
 .hr{
     border:none;
-    border-top:1px solid var(--line);
+    /* riga tratteggiata, come su un segnapunti */
+    border-top:1px dashed var(--line);
     margin:6px 0;
+}
+
+@media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+    }
 }

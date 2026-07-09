@@ -1,6 +1,14 @@
 const ROOM_ID = window.__ROOM_ID__;
 const CTX = window.__CTX__;
 
+/* Tempi dell'interfaccia (ms) */
+const REVEAL_AUTO_CLOSE_MS = 12000;   // l'esito del round si chiude da solo
+const RECENT_RESULT_MS = 15000;       // esito ancora "fresco" dopo un reload
+const TOAST_MS = 1600;
+const RECONNECT_BASE_DELAY_MS = 600;  // backoff esponenziale della riconnessione
+const RECONNECT_MAX_DELAY_MS = 5000;
+const FX_THROTTLE_MS = 250;           // anti-doppione per le animazioni di pesca
+
 let ws = null;
 let lastState = null;
 let currentNoticeId = null;
@@ -12,6 +20,11 @@ let lastDeckFxAt = 0;
 
 let reconnectAttempts = 0;
 let reconnectTimer = null;
+
+let turnDeadlineLocal = null;
+let firstStateSeen = false;
+let lastRoundResultId = 0;
+let revealTimer = null;
 
 function escapeHtml(str){
     return (str ?? "")
@@ -86,12 +99,25 @@ function setPendingTopVisible(show, pendingCard){
    FX helpers
    ========================= */
 
+function isInPlay(phase){
+    return phase === "PLAYING" || phase === "KNOCK_CALLED";
+}
+
+/** Centro del riquadro "Carta pescata" se visibile, altrimenti il fallback. */
+function pendingTargetCenter(fallbackCx, fallbackCy){
+    const topRow = document.querySelector(".tableTopRow");
+    const pendingCardEl = document.querySelector(".tableTopRow #pendingCardTxt");
+    if (topRow && topRow.classList.contains("hasPendingTop") && pendingCardEl) {
+        const dst = pendingCardEl.getBoundingClientRect();
+        return { x: dst.left + dst.width/2, y: dst.top + dst.height/2 };
+    }
+    return { x: fallbackCx, y: fallbackCy };
+}
+
 function shouldAnimateDiscardDraw(prev, cur){
     if (!prev || !cur) return false;
 
-    const inPlayPrev = (prev.phase === "PLAYING" || prev.phase === "KNOCK_CALLED");
-    const inPlayCur  = (cur.phase === "PLAYING" || cur.phase === "KNOCK_CALLED");
-    if (!inPlayPrev || !inPlayCur) return false;
+    if (!isInPlay(prev.phase) || !isInPlay(cur.phase)) return false;
 
     if ((prev.currentIndex ?? -1) !== (cur.currentIndex ?? -1)) return false;
     if ((prev.deckSize ?? 0) !== (cur.deckSize ?? 0)) return false;
@@ -117,7 +143,7 @@ function megaFlashDiscard(actorIdx, players){
     megaFlashDiscard._tid = setTimeout(() => pile.classList.remove("discardMega"), 1150);
 
     const name = (players && actorIdx >= 0 && actorIdx < players.length) ? (players[actorIdx]?.name ?? "") : "";
-    showFxLabelAt("discard", name ? `PESCA DAGLI SCARTI • ${name}` : "PESCA DAGLI SCARTI");
+    showDiscardFxLabel(name ? `PESCA DAGLI SCARTI • ${name}` : "PESCA DAGLI SCARTI");
 }
 
 function flyCardFromDiscard(prevTopCard){
@@ -130,18 +156,7 @@ function flyCardFromDiscard(prevTopCard){
     const srcCx = src.left + src.width/2;
     const srcCy = src.top + src.height/2;
 
-    let dstCx = srcCx;
-    let dstCy = srcCy - 180;
-
-    const topRow = document.querySelector(".tableTopRow");
-    const pendingCardEl = document.querySelector(".tableTopRow #pendingCardTxt");
-    const pendingVisible = !!(topRow && topRow.classList.contains("hasPendingTop") && pendingCardEl);
-
-    if (pendingVisible) {
-        const dst = pendingCardEl.getBoundingClientRect();
-        dstCx = dst.left + dst.width/2;
-        dstCy = dst.top + dst.height/2;
-    }
+    const { x: dstCx, y: dstCy } = pendingTargetCenter(srcCx, srcCy - 180);
 
     const w = Math.max(120, Math.min(180, src.width));
     const h = Math.max(160, Math.min(240, src.height));
@@ -161,7 +176,7 @@ function flyCardFromDiscard(prevTopCard){
         fx.appendChild(img);
     } else {
         fx.textContent = prevTopCard.label ?? "Carta";
-        fx.style.fontWeight = "1000";
+        fx.style.fontWeight = "700";
         fx.style.padding = "10px";
         fx.style.textAlign = "center";
     }
@@ -183,7 +198,7 @@ function flyCardFromDiscard(prevTopCard){
 
 function triggerDiscardDrawFX(prevTopCard, actorIdx, players){
     const now = Date.now();
-    if (now - lastDiscardFxAt < 250) return;
+    if (now - lastDiscardFxAt < FX_THROTTLE_MS) return;
     lastDiscardFxAt = now;
 
     megaFlashDiscard(actorIdx, players);
@@ -193,9 +208,7 @@ function triggerDiscardDrawFX(prevTopCard, actorIdx, players){
 function shouldAnimateDeckDraw(prev, cur){
     if (!prev || !cur) return false;
 
-    const inPlayPrev = (prev.phase === "PLAYING" || prev.phase === "KNOCK_CALLED");
-    const inPlayCur  = (cur.phase === "PLAYING" || cur.phase === "KNOCK_CALLED");
-    if (!inPlayPrev || !inPlayCur) return false;
+    if (!isInPlay(prev.phase) || !isInPlay(cur.phase)) return false;
 
     if ((prev.currentIndex ?? -1) !== (cur.currentIndex ?? -1)) return false;
 
@@ -213,18 +226,7 @@ function flyCardFromDeck(){
     const srcCx = src.left + src.width/2;
     const srcCy = src.top + src.height/2;
 
-    let dstCx = srcCx;
-    let dstCy = srcCy - 200;
-
-    const topRow = document.querySelector(".tableTopRow");
-    const pendingCardEl = document.querySelector(".tableTopRow #pendingCardTxt");
-    const pendingVisible = !!(topRow && topRow.classList.contains("hasPendingTop") && pendingCardEl);
-
-    if (pendingVisible) {
-        const dst = pendingCardEl.getBoundingClientRect();
-        dstCx = dst.left + dst.width/2;
-        dstCy = dst.top + dst.height/2;
-    }
+    const { x: dstCx, y: dstCy } = pendingTargetCenter(srcCx, srcCy - 200);
 
     const w = 130;
     const h = 185;
@@ -235,10 +237,10 @@ function flyCardFromDeck(){
     fx.style.height = `${h}px`;
     fx.style.left = `${srcCx - w/2}px`;
     fx.style.top  = `${srcCy - h/2}px`;
-    fx.style.border = "1px solid rgba(255,255,255,.14)";
-    fx.style.background = "rgba(18,26,43,.78)";
-    fx.style.boxShadow = "0 14px 26px rgba(0,0,0,.45)";
-    fx.style.opacity = "0.92";
+    fx.style.border = "1px solid rgba(217,201,163,.9)";
+    fx.style.background = "rgba(253,249,238,.95)";
+    fx.style.boxShadow = "0 10px 24px rgba(14,28,18,.40)";
+    fx.style.opacity = "0.95";
 
     const deckImg = document.querySelector("#deckPile .cardBox img");
     const backSrc = deckImg?.src || `${CTX}/images/retro_mazzo.jpg`;
@@ -246,7 +248,7 @@ function flyCardFromDeck(){
     const img = document.createElement("img");
     img.src = backSrc;
     img.alt = "Retro carta";
-    img.style.filter = "drop-shadow(0 10px 14px rgba(0,0,0,.35))";
+    img.style.filter = "drop-shadow(0 4px 8px rgba(14,28,18,.30))";
     fx.appendChild(img);
 
     document.body.appendChild(fx);
@@ -266,17 +268,14 @@ function flyCardFromDeck(){
 
 function triggerDeckDrawFX(){
     const now = Date.now();
-    if (now - lastDeckFxAt < 250) return;
+    if (now - lastDeckFxAt < FX_THROTTLE_MS) return;
     lastDeckFxAt = now;
 
     flyCardFromDeck();
 }
 
-function showFxLabelAt(which, text){
-    const anchor = (which === "deck")
-        ? document.getElementById("deckPile")
-        : (document.getElementById("discardTopTxt") || document.getElementById("discardPile"));
-
+function showDiscardFxLabel(text){
+    const anchor = document.getElementById("discardTopTxt") || document.getElementById("discardPile");
     if (!anchor) return;
 
     const r = anchor.getBoundingClientRect();
@@ -329,10 +328,15 @@ function connect(){
 
         if (fatal) {
             console.warn("WS closed (fatal):", ev.code, reason);
+            toast("Sei stato rimosso dalla stanza");
+            setTimeout(() => {
+                location.href = `${CTX}/join?room=${encodeURIComponent(ROOM_ID)}`;
+            }, 1500);
             return;
         }
 
-        const delay = Math.min(5000, 600 * (2 ** Math.min(reconnectAttempts, 4)));
+        const delay = Math.min(RECONNECT_MAX_DELAY_MS,
+            RECONNECT_BASE_DELAY_MS * (2 ** Math.min(reconnectAttempts, 4)));
         reconnectAttempts++;
 
         console.warn("WS closed. Reconnect in", delay, "ms", ev.code, reason);
@@ -368,7 +372,7 @@ function pileClick(which){
     if (viewerObj?.eliminated) return;
 
     const myTurn = (viewerIndex === currentIndex);
-    const inPlay = (phase === "PLAYING" || phase === "KNOCK_CALLED");
+    const inPlay = isInPlay(phase);
     const hasPending = !!(viewerObj && viewerObj.pendingDraw);
 
     if (!(myTurn && inPlay && !hasPending)) return;
@@ -394,7 +398,7 @@ function toast(msg){
     t.textContent = msg ?? "";
     t.classList.add("on");
     clearTimeout(toast._tid);
-    toast._tid = setTimeout(() => t.classList.remove("on"), 1600);
+    toast._tid = setTimeout(() => t.classList.remove("on"), TOAST_MS);
 }
 
 /* =========================
@@ -474,9 +478,16 @@ function confirmKeep(){
 function renderHand(viewHand, allowSwap){
     const handRow = document.getElementById("handRow");
     if (!handRow) return;
-    handRow.innerHTML = "";
 
     const hand = Array.isArray(viewHand) ? viewHand : [];
+
+    // Se mano e modalità non sono cambiate, evita di ricostruire il DOM
+    // (e di far ricaricare le immagini) a ogni messaggio del server.
+    const sig = hand.map(c => cardKey(c) ?? "?").join("|") + (allowSwap ? "|swap" : "");
+    if (sig === renderHand._sig) return;
+    renderHand._sig = sig;
+
+    handRow.innerHTML = "";
 
     if (!allowSwap) {
         selectedDiscardIndex = null;
@@ -509,7 +520,7 @@ function renderHand(viewHand, allowSwap){
             ${imgUrl ? `<img src="${imgUrl}" alt="${escapeHtml(label)}" />`
             : `<div style="font-weight:900;">${escapeHtml(label)}</div>`}
           </div>
-          <div class="muted" style="font-size:12px; text-align:center;">
+          <div class="muted">
             ${escapeHtml(label)}
           </div>
         `;
@@ -517,6 +528,90 @@ function renderHand(viewHand, allowSwap){
     });
 
     if (allowSwap && selectedDiscardIndex != null) setSelectedDiscard(selectedDiscardIndex);
+}
+
+/* =========================
+   Timer di turno
+   ========================= */
+
+function tickTurnTimer(){
+    const el = document.getElementById("timerPill");
+    if (!el) return;
+
+    if (turnDeadlineLocal == null) {
+        el.classList.remove("on", "low");
+        return;
+    }
+
+    const secs = Math.max(0, Math.ceil((turnDeadlineLocal - Date.now()) / 1000));
+    el.textContent = `${secs} s`;
+    el.classList.add("on");
+    el.classList.toggle("low", secs <= 15);
+}
+
+/* =========================
+   Al tavolo — registro mosse
+   ========================= */
+
+function renderEvents(events){
+    const root = document.getElementById("eventFeed");
+    if (!root) return;
+
+    if (!events.length) {
+        root.innerHTML = '<div class="evt muted">Ancora nessuna mossa.</div>';
+        return;
+    }
+
+    root.innerHTML = events.map(e => {
+        const t = new Date(e.at ?? Date.now());
+        const hh = String(t.getHours()).padStart(2, "0");
+        const mm = String(t.getMinutes()).padStart(2, "0");
+        return `<div class="evt"><span class="evtTime">${hh}:${mm}</span>${escapeHtml(e.msg ?? "")}</div>`;
+    }).join("");
+}
+
+/* =========================
+   Fine round — mani rivelate
+   ========================= */
+
+function showReveal(rr){
+    const ov = document.getElementById("revealOverlay");
+    const msg = document.getElementById("revealMsg");
+    const hands = document.getElementById("revealHands");
+    if (!ov || !hands) return;
+
+    if (msg) msg.textContent = rr.message ?? "";
+    hands.innerHTML = "";
+
+    (rr.hands ?? []).forEach(h => {
+        const div = document.createElement("div");
+        div.className = "revealHand" + (h.lostLife ? " lost" : "");
+
+        const cardsHtml = (h.cards ?? []).map(c => {
+            const url = cardImageUrl(c);
+            const labelEsc = escapeHtml(c?.label ?? "");
+            return url ? `<img src="${url}" alt="${labelEsc}">` : `<span>${labelEsc}</span>`;
+        }).join("");
+
+        let badge = "";
+        if (h.eliminated) badge = '<span class="revealBadge out">eliminato</span>';
+        else if (h.lostLife) badge = '<span class="revealBadge">-1 vita</span>';
+
+        div.innerHTML = `
+          <div class="revealName">${escapeHtml(h.name ?? "—")}<span class="revealScore">${Number(h.score ?? 0)}</span>${badge}</div>
+          <div class="revealCards">${cardsHtml}</div>`;
+        hands.appendChild(div);
+    });
+
+    ov.style.display = "flex";
+    clearTimeout(revealTimer);
+    revealTimer = setTimeout(closeReveal, REVEAL_AUTO_CLOSE_MS);
+}
+
+function closeReveal(){
+    clearTimeout(revealTimer);
+    const ov = document.getElementById("revealOverlay");
+    if (ov) ov.style.display = "none";
 }
 
 /* =========================
@@ -573,6 +668,17 @@ function hideWinnerOverlay(){
     if (ov) ov.style.display = "none";
 }
 
+const PHASE_LABELS = {
+    "WAITING_FOR_PLAYERS": "In attesa di giocatori",
+    "PLAYING": "In gioco",
+    "KNOCK_CALLED": "Bussata — ultimi turni",
+    "GAME_OVER": "Partita terminata"
+};
+
+function phaseLabel(phase){
+    return PHASE_LABELS[phase] ?? phase;
+}
+
 function renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectating){
     const statusTxt = document.getElementById("statusTxt");
     const statusPill = document.getElementById("statusPill");
@@ -585,16 +691,16 @@ function renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectatin
     let title = "—";
     let sub = "";
     let pillText = "—";
-    let pillClass = "pill";
+    let pillTurn = false;
 
     if (phase === "WAITING_FOR_PLAYERS") {
         title = "In attesa di giocatori";
-        sub = "Quando siete pronti, il Player 1 può avviare la partita.";
-        pillText = "WAITING";
+        sub = "Quando siete pronti, il creatore della stanza può avviare la partita.";
+        pillText = "IN ATTESA";
     } else if (phase === "GAME_OVER") {
         title = "Partita terminata";
         sub = "È stato dichiarato un vincitore.";
-        pillText = "GAME OVER";
+        pillText = "FINE PARTITA";
     } else if (viewerSpectating) {
         title = "Sei uno spettatore";
         sub = "Stai guardando la partita in corso. Entrerai a giocare nella prossima partita.";
@@ -605,11 +711,11 @@ function renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectatin
             ? "Turni finali dopo bussata: pesca e chiudi il turno."
             : "Pesca una carta o bussa (se vuoi chiudere).";
         pillText = "TOCCA A TE";
-        pillClass = "pill turn";
+        pillTurn = true;
     } else {
         title = "In attesa";
         sub = "Sta giocando: " + curName;
-        pillText = "ATTENDI";
+        pillText = "Turno di " + curName;
     }
 
     if (statusTxt) {
@@ -618,7 +724,7 @@ function renderBanner(phase, viewerIndex, currentIndex, players, viewerSpectatin
     }
     if (statusPill) {
         statusPill.textContent = pillText;
-        statusPill.className = pillClass;
+        statusPill.classList.toggle("turn", pillTurn);
     }
 }
 
@@ -647,7 +753,7 @@ function render(){
 
     const phaseTxt = document.getElementById("phaseTxt");
     const turnTxt = document.getElementById("turnTxt");
-    if (phaseTxt) phaseTxt.textContent = phase;
+    if (phaseTxt) phaseTxt.textContent = phaseLabel(phase);
     if (turnTxt) turnTxt.textContent = (currentIndex >= 0 ? (currentIndex + 1) : "—");
 
     const deckNum = (lastState.deckSize ?? 0);
@@ -655,7 +761,11 @@ function render(){
     if (deckNumTxt) deckNumTxt.textContent = String(deckNum);
 
     const discardTopTxt = document.getElementById("discardTopTxt");
-    if (discardTopTxt) discardTopTxt.innerHTML = lastState.discardTop ? cardImgHtml(lastState.discardTop) : "—";
+    const discardKey = cardKey(lastState.discardTop) ?? "";
+    if (discardTopTxt && discardKey !== render._discardKey) {
+        render._discardKey = discardKey;
+        discardTopTxt.innerHTML = lastState.discardTop ? cardImgHtml(lastState.discardTop) : "—";
+    }
 
     const players = Array.isArray(lastState.players) ? lastState.players : [];
 
@@ -675,6 +785,30 @@ function render(){
         triggerDeckDrawFX();
     }
     prevAnimState = curSnap;
+
+    // Timer di turno: il server manda i secondi rimasti, il ticker locale scala
+    const tsl = lastState.turnSecondsLeft;
+    turnDeadlineLocal = (typeof tsl === "number") ? Date.now() + tsl * 1000 : null;
+    tickTurnTimer();
+
+    renderEvents(Array.isArray(lastState.events) ? lastState.events : []);
+
+    // Esito round: si mostra solo quando arriva un esito nuovo; al primo
+    // stato dopo un (ri)caricamento solo se ancora recente.
+    const rr = lastState.roundResult;
+    let revealJustShown = false;
+    if (!firstStateSeen) {
+        firstStateSeen = true;
+        lastRoundResultId = rr ? rr.id : 0;
+        if (rr && typeof rr.ageMs === "number" && rr.ageMs < RECENT_RESULT_MS) {
+            showReveal(rr);
+            revealJustShown = true;
+        }
+    } else if (rr && rr.id !== lastRoundResultId) {
+        lastRoundResultId = rr.id;
+        showReveal(rr);
+        revealJustShown = true;
+    }
 
     const viewerSpectating = !!lastState.viewerSpectating;
 
@@ -706,7 +840,7 @@ function render(){
         }
     }
 
-    const inPlay = (phase === "PLAYING" || phase === "KNOCK_CALLED");
+    const inPlay = isInPlay(phase);
     const myTurn = (!spectator && viewerIndex === currentIndex);
 
     const viewPending = lastState.viewPending ?? null;
@@ -731,10 +865,12 @@ function render(){
 
     if (phase === "GAME_OVER" && winnerIndex != null && winnerIndex >= 0 && winnerIndex < players.length) {
         hideNotice();
+        // chiude solo un reveal residuo di un round precedente
+        if (!revealJustShown) closeReveal();
         currentNoticeId = null;
 
         const wName = players[winnerIndex]?.name ?? ("Player " + (winnerIndex + 1));
-        const isHost = (viewerIndex === 0);
+        const isHost = !!lastState.viewerIsHost;
         showWinnerOverlay(wName, isHost);
     } else {
         hideWinnerOverlay();
@@ -768,7 +904,7 @@ function render(){
     const startHint = document.getElementById("startHint");
     if (btnStart) {
         const joinedCount = players.reduce((acc, p) => acc + (isJoinedPlayer(p) ? 1 : 0), 0);
-        const isHost = (viewerIndex === 0);
+        const isHost = !!lastState.viewerIsHost;
         const isWaiting = (phase === "WAITING_FOR_PLAYERS");
 
         btnStart.style.display = isWaiting ? "" : "none";
@@ -778,7 +914,7 @@ function render(){
 
         if (startHint) {
             if (!isWaiting) startHint.textContent = "";
-            else if (!isHost) startHint.textContent = "Solo il creatore della stanza (Player 1) può avviare la partita.";
+            else if (!isHost) startHint.textContent = "Solo il creatore della stanza può avviare la partita.";
             else if (joinedCount < 2) startHint.textContent = "Servono almeno 2 giocatori per iniziare.";
             else startHint.textContent = "Pronto: puoi avviare la partita.";
         }
@@ -807,9 +943,12 @@ function copyInvite(){
     if (inp) inp.value = url;
 
     if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(url).catch(() => fallbackCopy());
+        navigator.clipboard.writeText(url)
+            .then(() => toast("Link copiato"))
+            .catch(() => { fallbackCopy(); toast("Link copiato"); });
     } else {
         fallbackCopy();
+        toast("Link copiato");
     }
 }
 
@@ -818,5 +957,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (inp) inp.value = inviteUrl();
 
     setPendingTopVisible(false, null);
+    setInterval(tickTurnTimer, 1000);
     connect();
 });

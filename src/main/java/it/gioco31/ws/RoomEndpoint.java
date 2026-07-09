@@ -1,5 +1,10 @@
 package it.gioco31.ws;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.gioco31.model.Card;
 import it.gioco31.model.GameState;
 import it.gioco31.model.Phase;
@@ -14,18 +19,32 @@ import jakarta.websocket.EndpointConfig;
 import jakarta.websocket.OnClose;
 import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
+import jakarta.websocket.RemoteEndpoint;
 import jakarta.websocket.Session;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @ServerEndpoint(value = "/ws/{roomId}", configurator = HttpSessionConfigurator.class)
 public class RoomEndpoint {
+
+    private static final Logger LOG = Logger.getLogger(RoomEndpoint.class.getName());
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** Attesa massima per l'invio a un singolo client prima di considerarlo bloccato. */
+    private static final long SEND_TIMEOUT_MS = 5_000L;
+
+    /** Quante voci del registro mosse viaggiano in ogni stato. */
+    private static final int EVENTS_IN_STATE = 15;
 
     private static final Map<String, Set<Session>> ROOM_SESSIONS = new ConcurrentHashMap<>();
 
@@ -50,13 +69,24 @@ public class RoomEndpoint {
         if (me == null) { ws.close(close("Invalid player")); return; }
 
         ws.getUserProperties().put("token", token);
-        ROOM_SESSIONS.computeIfAbsent(rid, k -> ConcurrentHashMap.newKeySet()).add(ws);
-        room.touch();
+        addSession(rid, ws);
+        room.markConnected(token);
         broadcast(rid, room);
     }
 
+    private static void addSession(String rid, Session ws) {
+        while (true) {
+            Set<Session> set = ROOM_SESSIONS.computeIfAbsent(rid, k -> ConcurrentHashMap.newKeySet());
+            set.add(ws);
+            // onClose/broadcast possono aver rimosso il set (vuoto) subito dopo
+            // computeIfAbsent: la sessione finirebbe in un set orfano, riprova.
+            if (ROOM_SESSIONS.get(rid) == set) return;
+            set.remove(ws);
+        }
+    }
+
     @OnMessage
-    public void onMessage(Session ws, String msg, @PathParam("roomId") String roomId) throws IOException {
+    public void onMessage(Session ws, String msg, @PathParam("roomId") String roomId) {
         String rid = RoomRepository.normalizeRoomId(roomId);
 
         GameRoom room = RoomRepository.get(rid);
@@ -76,7 +106,7 @@ public class RoomEndpoint {
 
         room.lock().lock();
         try {
-            applyAction(room, me, parts);
+            applyAction(room, me, room.isHost(token), parts);
             room.touch();
         } finally {
             room.lock().unlock();
@@ -88,6 +118,7 @@ public class RoomEndpoint {
     @OnClose
     public void onClose(Session ws, @PathParam("roomId") String roomId) {
         String rid = RoomRepository.normalizeRoomId(roomId);
+        String token = (String) ws.getUserProperties().get("token");
 
         Set<Session> set = ROOM_SESSIONS.get(rid);
         if (set != null) {
@@ -96,9 +127,27 @@ public class RoomEndpoint {
         }
 
         ws.getUserProperties().remove("token");
+
+        if (token == null) return;
+        GameRoom room = RoomRepository.get(rid);
+        if (room == null) return;
+
+        // Se era l'ultima connessione del giocatore, parte il periodo di grazia.
+        if (!hasOpenSessionForToken(rid, token)) {
+            room.markDisconnected(token, System.currentTimeMillis());
+        }
     }
 
-    private void applyAction(GameRoom room, int me, String[] parts) {
+    private static boolean hasOpenSessionForToken(String rid, String token) {
+        Set<Session> set = ROOM_SESSIONS.get(rid);
+        if (set == null) return false;
+        for (Session s : set) {
+            if (s.isOpen() && token.equals(s.getUserProperties().get("token"))) return true;
+        }
+        return false;
+    }
+
+    private void applyAction(GameRoom room, int me, boolean isHost, String[] parts) {
         GameState s = room.state();
 
         String action = parts[1];
@@ -115,7 +164,7 @@ public class RoomEndpoint {
 
         if ("restartGame".equals(action)) {
             if (s.getPhase() != Phase.GAME_OVER) return;
-            if (me != 0) return; // host = player 1
+            if (!isHost) return;
             restartGame(room, s);
             return;
         }
@@ -128,119 +177,60 @@ public class RoomEndpoint {
         if (s.getCurrentIndex() != me) return;
 
         switch (action) {
-            case "drawDeck" -> {
-                try { room.engine().drawPendingFromDeck(s); }
-                catch (RuntimeException ex) { s.setNoticeForPlayer(me, ex.getMessage()); }
-            }
-            case "drawDiscard" -> {
-                try { room.engine().drawPendingFromDiscard(s); }
-                catch (RuntimeException ex) { s.setNoticeForPlayer(me, ex.getMessage()); }
-            }
-
+            case "drawDeck"    -> applyOrNotify(s, me, () -> room.engine().drawPendingFromDeck(s));
+            case "drawDiscard" -> applyOrNotify(s, me, () -> room.engine().drawPendingFromDiscard(s));
             case "keep" -> {
-                if (parts.length >= 3) {
-                    try {
-                        int idx = Integer.parseInt(parts[2]);
-
-                        boolean made31 = room.engine().takeAndDiscard(s, idx);
-                        if (made31) applyInstantThirtyOneWin(room, s, me);
-
-                    } catch (NumberFormatException ignored) {
-                    } catch (RuntimeException ex) {
-                        s.setNoticeForPlayer(me, ex.getMessage());
-                    }
-                }
+                Integer idx = parseIntOrNull(parts.length >= 3 ? parts[2] : null);
+                if (idx != null) applyOrNotify(s, me, () -> room.engine().keepPendingDraw(s, idx));
             }
-
-            case "reject" -> {
-                try { room.engine().rejectDraw(s); }
-                catch (RuntimeException ex) { s.setNoticeForPlayer(me, ex.getMessage()); }
-            }
-
-            case "knock" -> {
-                try { room.engine().knock(s); }
-                catch (RuntimeException ex) { s.setNoticeForPlayer(me, ex.getMessage()); }
-            }
-
+            case "reject" -> applyOrNotify(s, me, () -> room.engine().rejectDraw(s));
+            case "knock"   -> applyOrNotify(s, me, () -> room.engine().knock(s));
             default -> { /* ignore */ }
         }
     }
 
+    /** Esegue una mossa; un rifiuto del motore diventa una notifica per il giocatore. */
+    private static void applyOrNotify(GameState s, int me, Runnable move) {
+        try {
+            move.run();
+        } catch (RuntimeException ex) {
+            s.setNoticeForPlayer(me, ex.getMessage());
+        }
+    }
+
+    private static Integer parseIntOrNull(String raw) {
+        if (raw == null) return null;
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     private void restartGame(GameRoom room, GameState s) {
-        int nextDealer = s.getNextMatchDealerIndex();
-
-        GameLifecycle.resetMatchState(s);
-        int joined = GameLifecycle.preparePlayersForNewMatch(s);
-
-        if (joined < 2) {
+        if (!GameLifecycle.startMatch(s, room.engine())) {
             s.setPhase(Phase.WAITING_FOR_PLAYERS);
-            return;
         }
-
-        s.setDealerIndex(nextDealer);
-        // Avanza il dealer per la partita successiva
-        s.setNextMatchDealerIndex(GameLifecycle.nextActiveFrom(s, nextDealer));
-        room.engine().startRound(s);
     }
 
-    private void applyInstantThirtyOneWin(GameRoom room, GameState s, int winnerIndex) {
-        if (s.getPhase() == Phase.WAITING_FOR_PLAYERS || s.getPhase() == Phase.GAME_OVER) return;
-
-        s.setPendingDraw(null);
-
-        int eliminatedNow = 0;
-
-        for (int i = 0; i < s.getPlayers().size(); i++) {
-            if (i == winnerIndex) continue;
-
-            Player other = s.getPlayers().get(i);
-            if (other.isEliminated()) continue;
-
-            int newLives = Math.max(0, other.getLives() - 1);
-            other.setLives(newLives);
-
-            if (newLives <= 0) {
-                other.setEliminated(true);
-                other.getHand().clear();
-                eliminatedNow++;
-            }
+    /** Ritrasmette lo stato a tutti i client della stanza (usato anche dallo sweeper). */
+    public static void broadcastRoom(String roomId) {
+        String rid = RoomRepository.normalizeRoomId(roomId);
+        GameRoom room = RoomRepository.get(rid);
+        if (room == null) return;
+        try {
+            broadcast(rid, room);
+        } catch (RuntimeException ex) {
+            LOG.log(Level.WARNING, "Broadcast fallito per la room " + rid, ex);
         }
-
-        int alive = 0;
-        for (Player p : s.getPlayers()) if (!p.isEliminated()) alive++;
-
-        if (alive <= 1) {
-            s.setWinnerIndex(winnerIndex);
-            s.setPhase(Phase.GAME_OVER);
-            s.clearAllNotices();
-            return;
-        }
-
-        String winnerName = safeName(s, winnerIndex);
-        String msg = (eliminatedNow > 0)
-                ? ("31! " + winnerName + " vince il round: tutti gli altri perdono 1 vita. (" + eliminatedNow + " eliminato/i)")
-                : ("31! " + winnerName + " vince il round: tutti gli altri perdono 1 vita.");
-
-        for (int i = 0; i < s.getPlayers().size(); i++) {
-            s.setNoticeForPlayer(i, msg);
-        }
-
-        room.engine().startRound(s);
     }
 
-    private String safeName(GameState s, int idx) {
-        if (idx < 0 || idx >= s.getPlayers().size()) return "Player";
-        String n = s.getPlayers().get(idx).getName();
-        if (n == null || n.isBlank()) return "Player " + (idx + 1);
-        return n;
-    }
-
-    private void broadcast(String rid, GameRoom room) throws IOException {
+    private static void broadcast(String rid, GameRoom room) {
         Set<Session> set = ROOM_SESSIONS.get(rid);
         if (set == null || set.isEmpty()) return;
 
-        var snapshot = new java.util.ArrayList<>(set);
-        var toRemove = new java.util.ArrayList<Session>();
+        var snapshot = new ArrayList<>(set);
+        var toRemove = new ArrayList<Session>();
 
         for (Session ws : snapshot) {
             if (ws == null || !ws.isOpen()) {
@@ -262,8 +252,9 @@ public class RoomEndpoint {
             }
 
             try {
-                sendState(ws, room, viewer);
+                sendState(ws, room, viewer, room.isHost(token));
             } catch (Exception e) {
+                LOG.log(Level.FINE, e, () -> "Invio stato fallito nella room " + rid + ", chiudo la sessione");
                 toRemove.add(ws);
                 try { ws.close(close("IO error")); } catch (Exception ignore) {}
             }
@@ -278,18 +269,27 @@ public class RoomEndpoint {
         }
     }
 
-    private void sendState(Session ws, GameRoom room, int viewerIndex) throws IOException {
+    private static void sendState(Session ws, GameRoom room, int viewerIndex, boolean viewerIsHost) throws Exception {
         String json;
         room.lock().lock();
         try {
-            json = buildStateJson(room.state(), viewerIndex);
+            json = buildStateJson(room.state(), viewerIndex, viewerIsHost);
         } finally {
             room.lock().unlock();
         }
-        ws.getBasicRemote().sendText(json);
+        // Un solo invio alla volta per sessione, con attesa limitata: un client
+        // bloccato non deve congelare il broadcast (né lo sweeper, che passa
+        // di qui) a tempo indeterminato. Alla scadenza l'eccezione fa chiudere
+        // la sessione dal chiamante.
+        synchronized (ws) {
+            RemoteEndpoint.Async remote = ws.getAsyncRemote();
+            remote.setSendTimeout(SEND_TIMEOUT_MS);
+            remote.sendText(json).get(SEND_TIMEOUT_MS * 2, TimeUnit.MILLISECONDS);
+        }
     }
 
-    private String buildStateJson(GameState s, int viewerIndex) {
+    // package-private per i test
+    static String buildStateJson(GameState s, int viewerIndex, boolean viewerIsHost) {
         List<Player> players = s.getPlayers();
         boolean viewerEliminated = false;
         boolean viewerSpectating = false;
@@ -299,7 +299,7 @@ public class RoomEndpoint {
             viewerSpectating = (v != null && v.isSpectating());
         }
 
-        boolean inPlay = (s.getPhase() == Phase.PLAYING || s.getPhase() == Phase.KNOCK_CALLED);
+        boolean inPlay = s.getPhase().isInPlay();
 
         int handViewIndex = (viewerEliminated && inPlay) ? s.getCurrentIndex() : viewerIndex;
         if (handViewIndex < 0 || handViewIndex >= players.size()) handViewIndex = viewerIndex;
@@ -315,98 +315,139 @@ public class RoomEndpoint {
 
         Player.BestSuitScore best = handOwner.bestSameSuitScore();
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append("\"phase\":").append(jsonStr(String.valueOf(s.getPhase()))).append(",");
-        sb.append("\"viewerIndex\":").append(viewerIndex).append(",");
-        sb.append("\"currentIndex\":").append(s.getCurrentIndex()).append(",");
-        sb.append("\"winnerIndex\":").append(s.getWinnerIndex() != null ? s.getWinnerIndex() : "null").append(",");
-        sb.append("\"deckSize\":").append(s.getDeck() != null ? s.getDeck().size() : 0).append(",");
-        sb.append("\"discardTop\":").append(cardJson(s.getDiscard().peek())).append(",");
+        ObjectNode root = MAPPER.createObjectNode();
+        root.put("phase", String.valueOf(s.getPhase()));
+        root.put("viewerIndex", viewerIndex);
+        root.put("currentIndex", s.getCurrentIndex());
+        if (s.getWinnerIndex() != null) root.put("winnerIndex", s.getWinnerIndex());
+        else root.putNull("winnerIndex");
+        root.put("deckSize", s.getDeck() != null ? s.getDeck().size() : 0);
+        root.set("discardTop", cardNode(s.getDiscard().peek()));
 
-        sb.append("\"viewerEliminated\":").append(viewerEliminated).append(",");
-        sb.append("\"viewerSpectating\":").append(viewerSpectating).append(",");
-        sb.append("\"handViewIndex\":").append(handViewIndex).append(",");
+        root.put("viewerEliminated", viewerEliminated);
+        root.put("viewerSpectating", viewerSpectating);
+        root.put("viewerIsHost", viewerIsHost);
+        root.put("handViewIndex", handViewIndex);
 
-        sb.append("\"viewHand\":[");
-        for (int h = 0; h < handOwner.getHand().size(); h++) {
-            if (h > 0) sb.append(",");
-            sb.append(cardJson(handOwner.getHand().get(h)));
+        putTurnTimer(root, s, inPlay);
+        putEvents(root, s);
+        putRoundResult(root, s);
+
+        ArrayNode viewHand = root.putArray("viewHand");
+        for (Card c : handOwner.getHand()) viewHand.add(cardNode(c));
+
+        root.put("viewBestSuitValue", best.getValue());
+        if (best.getSuit() != null) root.put("viewBestSuitLabel", best.getSuit().label());
+        else root.putNull("viewBestSuitLabel");
+        root.set("viewPending", cardNode(viewPending));
+
+        putPlayers(root, s, viewerIndex, viewerEliminated);
+
+        return root.toString();
+    }
+
+    /** Timer di turno (secondi rimanenti), solo a partita in corso. */
+    private static void putTurnTimer(ObjectNode root, GameState s, boolean inPlay) {
+        long deadline = s.getTurnDeadlineMs();
+        if (inPlay && deadline > 0) {
+            long leftMs = Math.max(0, deadline - System.currentTimeMillis());
+            root.put("turnSecondsLeft", (int) ((leftMs + 999) / 1000));
+        } else {
+            root.putNull("turnSecondsLeft");
         }
-        sb.append("],");
-        sb.append("\"viewBestSuitValue\":").append(best.getValue()).append(",");
-        sb.append("\"viewBestSuitLabel\":").append(best.getSuit() == null ? "null" : jsonStr(best.getSuit().label())).append(",");
-        sb.append("\"viewPending\":").append(cardJson(viewPending)).append(",");
+    }
 
-        sb.append("\"players\":[");
+    /** Registro mosse: le più recenti per prime. */
+    private static void putEvents(ObjectNode root, GameState s) {
+        ArrayNode eventsArr = root.putArray("events");
+        List<GameState.Event> events = s.getEvents();
+        int firstEvent = Math.max(0, events.size() - EVENTS_IN_STATE);
+        for (int i = events.size() - 1; i >= firstEvent; i--) {
+            GameState.Event e = events.get(i);
+            ObjectNode en = eventsArr.addObject();
+            en.put("id", e.getId());
+            en.put("at", e.getAtMs());
+            en.put("msg", e.getMessage());
+        }
+    }
+
+    /** Esito dell'ultimo round: mani rivelate (il round è concluso, non sono segrete). */
+    private static void putRoundResult(ObjectNode root, GameState s) {
+        GameState.RoundResult rr = s.getRoundResult();
+        if (rr == null) {
+            root.putNull("roundResult");
+            return;
+        }
+
+        ObjectNode rn = root.putObject("roundResult");
+        rn.put("id", rr.getId());
+        // Età relativa (non timestamp assoluto): il client non deve
+        // dipendere dall'allineamento del proprio orologio col server.
+        rn.put("ageMs", Math.max(0, System.currentTimeMillis() - rr.getAtMs()));
+        rn.put("message", rr.getMessage());
+        ArrayNode handsArr = rn.putArray("hands");
+        for (GameState.RevealedHand h : rr.getHands()) {
+            ObjectNode hn = handsArr.addObject();
+            hn.put("index", h.getIndex());
+            hn.put("name", h.getName());
+            hn.put("score", h.getScore());
+            hn.put("lostLife", h.isLostLife());
+            hn.put("eliminated", h.isEliminated());
+            ArrayNode cardsArr = hn.putArray("cards");
+            for (Card c : h.getCards()) cardsArr.add(cardNode(c));
+        }
+    }
+
+    /** Elenco giocatori; carta pescata e notifica solo per il viewer legittimo. */
+    private static void putPlayers(ObjectNode root, GameState s, int viewerIndex, boolean viewerEliminated) {
+        List<Player> players = s.getPlayers();
+        ArrayNode playersArr = root.putArray("players");
         GameState.Notice viewerNotice = s.getNoticeForPlayer(viewerIndex);
         for (int i = 0; i < players.size(); i++) {
             Player p = players.get(i);
-            if (i > 0) sb.append(",");
 
-            sb.append("{");
-            sb.append("\"index\":").append(i).append(",");
-            sb.append("\"name\":").append(jsonStr(p.getName())).append(",");
-            sb.append("\"lives\":").append(p.getLives()).append(",");
-            sb.append("\"eliminated\":").append(p.isEliminated()).append(",");
-            sb.append("\"spectating\":").append(p.isSpectating()).append(",");
-            sb.append("\"joined\":").append(p.isJoined()).append(",");
-            sb.append("\"cardCount\":").append(p.getHand().size()).append(",");
+            ObjectNode pn = playersArr.addObject();
+            pn.put("index", i);
+            pn.put("name", p.getName());
+            pn.put("lives", p.getLives());
+            pn.put("eliminated", p.isEliminated());
+            pn.put("spectating", p.isSpectating());
+            pn.put("joined", p.isJoined());
+            pn.put("cardCount", p.getHand().size());
 
             Card pendingForViewer = (!viewerEliminated
                     && i == viewerIndex
                     && viewerIndex == s.getCurrentIndex())
                     ? s.getPendingDraw()
                     : null;
-            sb.append("\"pendingDraw\":").append(cardJson(pendingForViewer)).append(",");
+            pn.set("pendingDraw", cardNode(pendingForViewer));
 
-            if (i == viewerIndex) {
-                sb.append("\"noticeId\":").append(viewerNotice != null ? viewerNotice.getId() : "null").append(",");
-                sb.append("\"noticeMsg\":").append(viewerNotice != null ? jsonStr(viewerNotice.getMessage()) : "null");
+            if (i == viewerIndex && viewerNotice != null) {
+                pn.put("noticeId", viewerNotice.getId());
+                pn.put("noticeMsg", viewerNotice.getMessage());
             } else {
-                sb.append("\"noticeId\":null,");
-                sb.append("\"noticeMsg\":null");
-            }
-
-            sb.append("}");
-        }
-        sb.append("]}");
-        return sb.toString();
-    }
-
-    private String cardJson(Card c) {
-        if (c == null) return "null";
-        return "{\"suit\":" + jsonStr(String.valueOf(c.suit())) +
-                ",\"rank\":" + jsonStr(String.valueOf(c.rank())) +
-                ",\"value\":" + c.value() +
-                ",\"label\":" + jsonStr(c.label()) + "}";
-    }
-
-    private String jsonStr(String x) {
-        if (x == null) return "null";
-        StringBuilder out = new StringBuilder(x.length() + 8);
-        out.append('"');
-        for (int i = 0; i < x.length(); i++) {
-            char ch = x.charAt(i);
-            switch (ch) {
-                case '\\' -> out.append("\\\\");
-                case '"'  -> out.append("\\\"");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                case '\b' -> out.append("\\b");
-                case '\f' -> out.append("\\f");
-                default -> {
-                    if (ch < 0x20) out.append(String.format("\\u%04x", (int) ch));
-                    else out.append(ch);
-                }
+                pn.putNull("noticeId");
+                pn.putNull("noticeMsg");
             }
         }
-        out.append('"');
-        return out.toString();
     }
 
-    private CloseReason close(String msg) {
+    private static JsonNode cardNode(Card c) {
+        if (c == null) return NullNode.getInstance();
+        ObjectNode n = MAPPER.createObjectNode();
+        n.put("suit", String.valueOf(c.suit()));
+        n.put("rank", String.valueOf(c.rank()));
+        n.put("value", c.value());
+        n.put("label", c.label());
+        return n;
+    }
+
+    /**
+     * I testi di chiusura sono contratto col client: room.js li confronta
+     * per distinguere le chiusure definitive da quelle riconnettibili.
+     * Non riformularli senza aggiornare la lista in room.js.
+     */
+    private static CloseReason close(String msg) {
         return new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, msg);
     }
 }

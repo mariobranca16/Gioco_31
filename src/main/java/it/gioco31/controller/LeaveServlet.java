@@ -2,6 +2,7 @@ package it.gioco31.controller;
 
 import it.gioco31.room.GameRoom;
 import it.gioco31.room.RoomRepository;
+import it.gioco31.ws.RoomEndpoint;
 
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -26,6 +27,9 @@ public class LeaveServlet extends HttpServlet {
                 if (room != null) {
                     room.releaseTokenAndFreeSlot(token);
                     room.touch();
+                    // L'uscita può aver cambiato turno, round o vincitore:
+                    // chi resta al tavolo va aggiornato subito.
+                    RoomEndpoint.broadcastRoom(roomId);
                 }
             }
             session.invalidate();

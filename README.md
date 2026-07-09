@@ -38,11 +38,21 @@ Prerequisiti: JDK 17 o superiore, Apache Tomcat 10 o superiore (necessario per i
    git clone https://github.com/mariobranca16/Gioco_31.git
    ```
 
-2. Importare il progetto nell'IDE (ad esempio IntelliJ IDEA) come web application basata su Jakarta EE.
+2. Avviare senza IDE, direttamente da riga di comando (scarica Tomcat in automatico):
 
-3. Configurare Apache Tomcat come application server e avviarlo.
+   ```bash
+   ./mvnw package cargo:run
+   ```
 
-4. Aprire l'applicazione nel browser, ad esempio su `http://localhost:8080/gioco31_war_exploded`.
+   poi aprire `http://localhost:8080/gioco31`.
+
+   In alternativa, importare il progetto nell'IDE (ad esempio IntelliJ IDEA) come web application Jakarta EE, configurare Apache Tomcat e avviarlo.
+
+3. Per eseguire i test:
+
+   ```bash
+   ./mvnw test
+   ```
 
 ## Note
 

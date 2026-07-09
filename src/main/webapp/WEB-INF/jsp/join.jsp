@@ -31,6 +31,9 @@
 
     String playersVal = request.getParameter("players");
     if (playersVal == null || playersVal.isBlank()) playersVal = "4";
+
+    String livesVal = request.getParameter("lives");
+    if (livesVal == null || livesVal.isBlank()) livesVal = "3";
 %>
 
 <%!
@@ -51,9 +54,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Gioco del 31 - Entra</title>
 
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=1">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=1">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/join.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Open+Sans:wght@400;500;700;800&display=swap">
+
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=5">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=6">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/join.css?v=3">
 </head>
 
 <body class="joinPage">
@@ -70,14 +77,14 @@
     <% } %>
 
     <% if (error != null) { %>
-    <div class="err"><b>Errore:</b> <%= h(error) %></div>
+    <div class="alert"><b>Errore:</b> <%= h(error) %></div>
     <% } %>
 
     <% if (inviteMode && hasRoom) { %>
     <!-- INVITO -->
     <div class="section">
         <div class="section-head">
-            <p class="section-title">✅ Entra tramite invito</p>
+            <p class="section-title">Entra tramite invito</p>
             <p class="section-subtitle">Inserisci il tuo nome per entrare nella stanza.</p>
         </div>
 
@@ -95,7 +102,7 @@
                    required autofocus />
 
             <div class="actions">
-                <button type="submit">Entra</button>
+                <button class="primary" type="submit">Entra</button>
             </div>
         </form>
     </div>
@@ -105,7 +112,7 @@
     <!-- CREA STANZA -->
     <div class="section">
         <div class="section-head">
-            <p class="section-title">① Crea una stanza</p>
+            <p class="section-title">Crea una stanza</p>
             <p class="section-subtitle">Scegli il tuo nome e il numero di giocatori.</p>
         </div>
 
@@ -134,10 +141,22 @@
                         <% } %>
                     </select>
                 </div>
+
+                <div class="col">
+                    <label for="lives">Vite a testa</label>
+                    <select id="lives" name="lives" required>
+                        <%
+                            for (int n = 2; n <= 5; n++) {
+                                String selLives = String.valueOf(n).equals(livesVal) ? "selected" : "";
+                        %>
+                        <option value="<%= n %>" <%= selLives %>><%= n %></option>
+                        <% } %>
+                    </select>
+                </div>
             </div>
 
             <div class="actions">
-                <button type="submit">Crea stanza</button>
+                <button class="primary" type="submit">Crea stanza</button>
             </div>
         </form>
     </div>
@@ -147,7 +166,7 @@
     <!-- ENTRA MANUALE -->
     <div class="section">
         <div class="section-head">
-            <p class="section-title">② Entra in una stanza</p>
+            <p class="section-title">Entra in una stanza</p>
             <p class="section-subtitle">Inserisci il codice stanza e il tuo nome.</p>
         </div>
 
@@ -170,7 +189,7 @@
                    required />
 
             <div class="actions">
-                <button type="submit">Entra</button>
+                <button class="primary" type="submit">Entra</button>
             </div>
         </form>
     </div>

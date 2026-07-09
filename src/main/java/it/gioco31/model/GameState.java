@@ -34,6 +34,92 @@ public final class GameState implements Serializable {
     private long noticeSeq = 0;
     private final Map<Integer, Notice> notices = new HashMap<>();
 
+    /**
+     * Scadenza (epoch ms) del turno corrente; 0 = nessun timer attivo.
+     * Volatile: letta senza lock dal thread di manutenzione (sweepTurnTimeout).
+     */
+    private volatile long turnDeadlineMs = 0;
+
+    private static final int MAX_EVENTS = 40;
+    private long eventSeq = 0;
+    private final ArrayDeque<Event> events = new ArrayDeque<>();
+
+    private long roundResultSeq = 0;
+    private RoundResult roundResult = null;
+
+    /** Voce del registro mosse, visibile a tutti i giocatori. */
+    public static final class Event implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final long id;
+        private final long atMs;
+        private final String message;
+
+        Event(long id, long atMs, String message) {
+            this.id = id;
+            this.atMs = atMs;
+            this.message = message;
+        }
+
+        public long getId() { return id; }
+        public long getAtMs() { return atMs; }
+        public String getMessage() { return message; }
+    }
+
+    /** Mano rivelata di un giocatore alla fine di un round. */
+    public static final class RevealedHand implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final int index;
+        private final String name;
+        private final int score;
+        private final boolean lostLife;
+        private final boolean eliminated;
+        private final List<Card> cards;
+
+        public RevealedHand(int index, String name, int score,
+                            boolean lostLife, boolean eliminated, List<Card> cards) {
+            this.index = index;
+            this.name = name;
+            this.score = score;
+            this.lostLife = lostLife;
+            this.eliminated = eliminated;
+            this.cards = List.copyOf(cards);
+        }
+
+        public int getIndex() { return index; }
+        public String getName() { return name; }
+        public int getScore() { return score; }
+        public boolean isLostLife() { return lostLife; }
+        public boolean isEliminated() { return eliminated; }
+        public List<Card> getCards() { return cards; }
+    }
+
+    /** Esito di un round concluso: messaggio e mani rivelate di tutti. */
+    public static final class RoundResult implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final long id;
+        private final long atMs;
+        private final String message;
+        private final List<RevealedHand> hands;
+
+        RoundResult(long id, long atMs, String message, List<RevealedHand> hands) {
+            this.id = id;
+            this.atMs = atMs;
+            this.message = message;
+            this.hands = List.copyOf(hands);
+        }
+
+        public long getId() { return id; }
+        public long getAtMs() { return atMs; }
+        public String getMessage() { return message; }
+        public List<RevealedHand> getHands() { return hands; }
+    }
+
     public static final class Notice implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
@@ -54,16 +140,6 @@ public final class GameState implements Serializable {
         this.players = players;
         this.seed = seed;
         this.startingLives = Math.max(1, startingLives);
-    }
-
-    public GameState(List<Player> players, long seed) {
-        this.players = players;
-        this.seed = seed;
-        int sl = 3;
-        if (players != null && !players.isEmpty() && players.get(0) != null) {
-            sl = Math.max(1, players.get(0).getLives());
-        }
-        this.startingLives = sl;
     }
 
     public List<Player> getPlayers() { return players; }
@@ -101,6 +177,21 @@ public final class GameState implements Serializable {
     public Integer getWinnerIndex() { return winnerIndex; }
     public void setWinnerIndex(Integer winnerIndex) { this.winnerIndex = winnerIndex; }
 
+    /** Indice del prossimo giocatore non eliminato dopo fromIndex (con wrap), o null se nessuno. */
+    public Integer nextActiveIndexAfter(int fromIndex) {
+        int n = players.size();
+        for (int step = 1; step <= n; step++) {
+            int i = (fromIndex + step) % n;
+            if (!players.get(i).isEliminated()) return i;
+        }
+        return null;
+    }
+
+    /** Indice del primo giocatore non eliminato (a partire da 0), o null se nessuno. */
+    public Integer firstActiveIndex() {
+        return nextActiveIndexAfter(players.size() - 1);
+    }
+
     public Notice getNoticeForPlayer(int playerIndex) {
         return notices.get(playerIndex);
     }
@@ -121,4 +212,24 @@ public final class GameState implements Serializable {
     public void clearAllNotices() {
         notices.clear();
     }
+
+    public long getTurnDeadlineMs() { return turnDeadlineMs; }
+    public void setTurnDeadlineMs(long turnDeadlineMs) { this.turnDeadlineMs = turnDeadlineMs; }
+
+    public void addEvent(String message) {
+        if (message == null || message.isBlank()) return;
+        events.addLast(new Event(++eventSeq, System.currentTimeMillis(), message));
+        while (events.size() > MAX_EVENTS) events.removeFirst();
+    }
+
+    public List<Event> getEvents() {
+        return List.copyOf(events);
+    }
+
+    public void setRoundResult(String message, List<RevealedHand> hands) {
+        this.roundResult = new RoundResult(++roundResultSeq, System.currentTimeMillis(), message, hands);
+    }
+
+    public RoundResult getRoundResult() { return roundResult; }
+    public void clearRoundResult() { roundResult = null; }
 }
