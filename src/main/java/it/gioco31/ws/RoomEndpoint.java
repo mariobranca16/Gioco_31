@@ -15,7 +15,6 @@ import it.gioco31.service.GameLifecycle;
 
 import jakarta.servlet.http.HttpSession;
 import jakarta.websocket.CloseReason;
-import jakarta.websocket.EndpointConfig;
 import jakarta.websocket.OnClose;
 import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
@@ -45,16 +44,51 @@ public class RoomEndpoint {
     /** Quante voci del registro mosse viaggiano in ogni stato. */
     private static final int EVENTS_IN_STATE = 15;
 
+    /** Anti-abuso del canale: lunghezza massima e messaggi al secondo per sessione. */
+    private static final int MAX_MSG_LEN = 200;
+    private static final int MAX_MSG_PER_SEC = 20;
+    private static final String RATE_KEY = "rate";
+
+    /**
+     * Finestra scorrevole O(1): conserva il timestamp degli ultimi
+     * MAX_MSG_PER_SEC messaggi ammessi. Se il più vecchio dei venti è entro
+     * l'ultimo secondo, la soglia è superata. Un'istanza per sessione, negli
+     * userProperties; il container consegna i messaggi di una sessione in
+     * serie, quindi non serve sincronizzazione.
+     */
+    private static final class RateWindow {
+        private final long[] ring = new long[MAX_MSG_PER_SEC];
+        private int idx = 0;
+
+        boolean allow(long nowMs) {
+            // ring[idx] è il 20°-ultimo messaggio ammesso (0 = mai, quindi lontano).
+            if (nowMs - ring[idx] < 1000L) return false;
+            ring[idx] = nowMs;
+            idx = (idx + 1) % ring.length;
+            return true;
+        }
+    }
+
     private static final Map<String, Set<Session>> ROOM_SESSIONS = new ConcurrentHashMap<>();
 
+    /**
+     * HttpSession del client, iniettata dal configurator per questa singola
+     * connessione. Non passa più dalla mappa condivisa di ServerEndpointConfig,
+     * che due handshake simultanei potrebbero sovrascriversi a vicenda.
+     */
+    private final HttpSession http;
+
+    public RoomEndpoint(HttpSession http) {
+        this.http = http;
+    }
+
     @OnOpen
-    public void onOpen(Session ws, EndpointConfig cfg, @PathParam("roomId") String roomId) throws IOException {
+    public void onOpen(Session ws, @PathParam("roomId") String roomId) throws IOException {
         String rid = RoomRepository.normalizeRoomId(roomId);
 
         GameRoom room = RoomRepository.get(rid);
         if (room == null) { ws.close(close("Room not found")); return; }
 
-        HttpSession http = (HttpSession) cfg.getUserProperties().get("httpSession");
         if (http == null) { ws.close(close("No HTTP session")); return; }
 
         String token = (String) http.getAttribute("playerToken");
@@ -86,6 +120,12 @@ public class RoomEndpoint {
 
     @OnMessage
     public void onMessage(Session ws, String msg, @PathParam("roomId") String roomId) {
+        // Anti-abuso: un messaggio troppo lungo o oltre la frequenza consentita
+        // viene ignorato in silenzio (niente chiusura, niente errore al client),
+        // prima di prendere il lock della stanza o scatenare un broadcast.
+        if (msg.length() > MAX_MSG_LEN) return;
+        if (!allowRate(ws)) return;
+
         String rid = RoomRepository.normalizeRoomId(roomId);
 
         GameRoom room = RoomRepository.get(rid);
@@ -96,12 +136,14 @@ public class RoomEndpoint {
 
         Integer me = room.indexByToken(token);
         if (me == null) {
-            try { ws.close(close("Invalid player")); } catch (Exception ignore) {}
+            closeQuietly(ws, "Invalid player");
             return;
         }
 
         String[] parts = msg.split(":", 3);
         if (parts.length < 2 || !"ACTION".equals(parts[0])) return;
+
+        boolean isPing = "ping".equals(parts[1]);
 
         room.lock().lock();
         try {
@@ -111,7 +153,10 @@ public class RoomEndpoint {
             room.lock().unlock();
         }
 
-        broadcast(rid, room);
+        // Il ping è solo heartbeat: non cambia lo stato, quindi niente broadcast
+        // (né bumpSeq). 6 client con un ping ogni 20 s genererebbero altrimenti
+        // traffico e incrementi di sequenza inutili in continuazione.
+        if (!isPing) broadcast(rid, room);
     }
 
     @OnClose
@@ -137,6 +182,16 @@ public class RoomEndpoint {
         }
     }
 
+    private static boolean allowRate(Session ws) {
+        Map<String, Object> props = ws.getUserProperties();
+        RateWindow rw = (RateWindow) props.get(RATE_KEY);
+        if (rw == null) {
+            rw = new RateWindow();
+            props.put(RATE_KEY, rw);
+        }
+        return rw.allow(System.currentTimeMillis());
+    }
+
     private static boolean hasOpenSessionForToken(String rid, String token) {
         Set<Session> set = ROOM_SESSIONS.get(rid);
         if (set == null) return false;
@@ -150,6 +205,14 @@ public class RoomEndpoint {
         GameState s = room.state();
 
         String action = parts[1];
+
+        if ("ping".equals(action)) {
+            // Heartbeat del client: tiene viva la connessione (i proxy chiudono
+            // i WebSocket inattivi) e segnala attività. Non modifica lo stato;
+            // il broadcast è soppresso in onMessage.
+            room.touch();
+            return;
+        }
 
         if ("ackNotice".equals(action)) {
             if (parts.length >= 3) {
@@ -221,6 +284,21 @@ public class RoomEndpoint {
             broadcast(rid, room);
         } catch (RuntimeException ex) {
             LOG.log(Level.WARNING, "Broadcast fallito per la room " + rid, ex);
+        }
+    }
+
+    /**
+     * Ripulisce dal registro le sessioni di una stanza non più esistente,
+     * invocata dallo sweeper dopo che RoomRepository ha rimosso la stanza.
+     * Sta qui (e non in RoomRepository) per non creare una dipendenza
+     * circolare tra repository ed endpoint: lo sweeper conosce entrambi.
+     */
+    public static void dropRoomSessions(String roomId) {
+        String rid = RoomRepository.normalizeRoomId(roomId);
+        Set<Session> set = ROOM_SESSIONS.remove(rid);
+        if (set == null) return;
+        for (Session ws : set) {
+            closeQuietly(ws, "Room not found");
         }
     }
 
@@ -483,5 +561,16 @@ public class RoomEndpoint {
      */
     private static CloseReason close(String msg) {
         return new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, msg);
+    }
+
+    // --- Ausili per i test: ROOM_SESSIONS è privato, non manipolabile dai test. ---
+
+    static void seedRoomSessionForTest(String roomId, Session ws) {
+        ROOM_SESSIONS.computeIfAbsent(RoomRepository.normalizeRoomId(roomId),
+                k -> ConcurrentHashMap.newKeySet()).add(ws);
+    }
+
+    static boolean hasRoomSessionsEntryForTest(String roomId) {
+        return ROOM_SESSIONS.containsKey(RoomRepository.normalizeRoomId(roomId));
     }
 }

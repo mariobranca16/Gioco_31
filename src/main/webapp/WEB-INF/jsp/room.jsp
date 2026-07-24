@@ -237,11 +237,18 @@
 
     <div id="toast" class="toast">—</div>
 
+    <!-- Banner di riconnessione persistente: riusa lo stile .toast -->
+    <div id="reconnectBanner" class="toast" role="status" aria-live="polite">
+        <span id="reconnectMsg">Connessione persa… riconnessione in corso</span>
+        <button id="reconnectRetry" class="ok" type="button"
+                style="display:none; margin-left:10px;" onclick="retryNow()">Riprova</button>
+    </div>
+
     <script>
         window.__ROOM_ID__ = "<%= js(roomId) %>";
         window.__CTX__ = "<%= js(ctx) %>";
     </script>
-    <script defer src="<%= h(ctx) %>/js/room.js?v=9"></script>
+    <script defer src="<%= h(ctx) %>/js/room.js?v=11"></script>
 
     <% } %>
 </div>

@@ -49,6 +49,30 @@ class GameRoomDisconnectTest {
     }
 
     @Test
+    void hostInLobbyIsEvictedOnlyAfterLobbyGrace() {
+        GameRoom room = newRoom(2);
+        room.markConnected("t0");
+        room.markConnected("t1"); // resta connesso: non interferisce con lo sweep
+        long now = System.currentTimeMillis();
+        room.markDisconnected("t0", now);
+
+        // La sola grazia normale non basta a rimuovere l'host in lobby.
+        assertTrue(room.sweepDisconnected(now + GRACE + 1).isEmpty(),
+                "l'host in lobby non scade con la sola grazia normale");
+        assertEquals(0, room.indexByToken("t0"));
+        assertTrue(room.state().getPlayers().get(0).isJoined());
+
+        // Scaduta anche la grazia lunga di lobby, l'host viene rimosso come gli altri.
+        long afterLobby = now + GRACE + GameConstants.HOST_LOBBY_GRACE_MS + 100;
+        List<String> expired = room.sweepDisconnected(afterLobby);
+
+        assertEquals(List.of("t0"), expired,
+                "dopo la grazia lunga di lobby il posto dell'host si libera");
+        assertNull(room.indexByToken("t0"));
+        assertFalse(room.state().getPlayers().get(0).isJoined());
+    }
+
+    @Test
     void connectedTokenNeverExpires() {
         GameRoom room = newRoom(2);
         room.markConnected("t0");

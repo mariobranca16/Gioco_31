@@ -41,9 +41,11 @@ public final class RoomRepository {
     /**
      * Pulizia delle stanze stantie. Unico punto di innesco: lo sweeper
      * periodico di {@link RoomMaintenance}, che la invoca a ogni giro.
+     * Ritorna gli id delle stanze rimosse, così il chiamante può ripulire
+     * anche eventuali risorse collegate (es. il registro delle sessioni WS).
      */
-    public static void cleanupStaleRoomsNow() {
-        cleanupStaleRooms(System.currentTimeMillis());
+    public static List<String> cleanupStaleRoomsNow() {
+        return cleanupStaleRooms(System.currentTimeMillis());
     }
 
     public static boolean exists(String roomId) {
@@ -68,8 +70,7 @@ public final class RoomRepository {
                 players.add(new Player("Slot " + (i + 1), lives));
             }
 
-            long seed = RND.nextLong();
-            GameState state = new GameState(players, seed, lives);
+            GameState state = new GameState(players, lives);
 
             GameRoom room = new GameRoom(roomId, state);
             if (putIfAbsent(room)) return room;
@@ -83,15 +84,18 @@ public final class RoomRepository {
         return sb.toString();
     }
 
-    private static void cleanupStaleRooms(long now) {
+    // package-private: i test iniettano il tempo corrente per non dover attendere.
+    static List<String> cleanupStaleRooms(long now) {
+        List<String> removed = new ArrayList<>();
         for (var e : ROOMS.entrySet()) {
             GameRoom room = e.getValue();
             if (room == null) continue;
 
             boolean stale = (now - room.getLastActivityMs()) > GameConstants.ROOM_STALE_MS;
             if (stale && !room.hasAnyJoinedPlayers()) {
-                ROOMS.remove(e.getKey(), room);
+                if (ROOMS.remove(e.getKey(), room)) removed.add(e.getKey());
             }
         }
+        return removed;
     }
 }

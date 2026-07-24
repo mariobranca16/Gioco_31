@@ -23,6 +23,14 @@ public final class GameConstants {
     public static final long DISCONNECT_GRACE_MS = 45_000L;
 
     /**
+     * Quanto a lungo l'host può restare disconnesso in lobby prima che il suo
+     * posto venga liberato. Serve a non tenere in memoria per sempre le stanze
+     * di chi le crea e chiude subito il browser: l'host non scade con la sola
+     * grazia normale, ma nemmeno resta indefinitamente.
+     */
+    public static final long HOST_LOBBY_GRACE_MS = 30L * 60 * 1000; // 30 minuti
+
+    /**
      * Grazia estesa tra il join HTTP e la prima apertura del WebSocket:
      * il primo caricamento pagina (tab mobile in background, rete lenta)
      * può richiedere molto più dei 45 secondi standard.

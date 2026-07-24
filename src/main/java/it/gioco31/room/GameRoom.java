@@ -9,6 +9,7 @@ import it.gioco31.service.ThirtyOneEngine;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
@@ -26,6 +27,9 @@ public final class GameRoom {
 
     /** token -> istante (ms) oltre il quale il giocatore disconnesso va rimosso. */
     private final Map<String, Long> disconnectDeadlineMs = new ConcurrentHashMap<>();
+
+    /** Host a cui è già stata concessa la grazia lunga di lobby: non va rinnovata. */
+    private final Set<String> hostLobbyGraceGranted = ConcurrentHashMap.newKeySet();
 
     /** Token del creatore della stanza (o del suo successore se è uscito). */
     private volatile String hostToken = null;
@@ -101,6 +105,9 @@ public final class GameRoom {
         try {
             if (!tokenToIndex.containsKey(token)) return;
             disconnectDeadlineMs.remove(token);
+            // Riconnesso: azzera l'eventuale grazia di lobby già concessa, così
+            // una futura disconnessione riparte dalla grazia normale.
+            hostLobbyGraceGranted.remove(token);
             touch();
         } finally {
             lock.unlock();
@@ -135,12 +142,20 @@ public final class GameRoom {
                 Long deadline = disconnectDeadlineMs.get(e.getKey());
                 if (deadline == null || nowMs < deadline) continue;
 
-                // Il creatore non perde mai il posto prima dell'avvio: senza
-                // di lui la partita non può partire. La stanza abbandonata
-                // viene comunque ripulita dalla scadenza per inattività.
+                // Il creatore non perde il posto mentre aspetta gli amici, ma
+                // solo per un tempo limitato: senza di lui la partita non può
+                // partire, però una stanza abbandonata non deve restare in
+                // memoria per sempre. Alla prima scadenza della grazia normale
+                // gliela sostituiamo con la grazia lunga di lobby, una sola
+                // volta (rinnovarla a ogni giro dello sweeper significherebbe
+                // non farla scadere mai). Scaduta anche quella, l'host viene
+                // rimosso come chiunque altro e lo slot si libera.
                 if (state.getPhase() == Phase.WAITING_FOR_PLAYERS && e.getKey().equals(hostToken)) {
-                    disconnectDeadlineMs.remove(e.getKey());
-                    continue;
+                    if (hostLobbyGraceGranted.add(e.getKey())) {
+                        disconnectDeadlineMs.put(e.getKey(), nowMs + GameConstants.HOST_LOBBY_GRACE_MS);
+                        continue;
+                    }
+                    // Grazia lunga già concessa e ora scaduta: procede alla rimozione.
                 }
 
                 releaseTokenAndFreeSlot(e.getKey());
@@ -190,6 +205,7 @@ public final class GameRoom {
         lock.lock();
         try {
             disconnectDeadlineMs.remove(token);
+            hostLobbyGraceGranted.remove(token);
             Integer idx = tokenToIndex.remove(token);
             if (idx == null) return;
             if (idx < 0 || idx >= state.getPlayers().size()) return;

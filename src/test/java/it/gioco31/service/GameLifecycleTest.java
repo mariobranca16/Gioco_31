@@ -18,7 +18,7 @@ class GameLifecycleTest {
     private static GameState newGame(int nPlayers) {
         List<Player> players = new ArrayList<>();
         for (int i = 0; i < nPlayers; i++) players.add(new Player("Player" + (i + 1), 3));
-        return new GameState(players, 42L, 3);
+        return new GameState(players, 3);
     }
 
     @Test

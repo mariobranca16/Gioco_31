@@ -28,6 +28,16 @@ Al termine di ogni round, il giocatore con il punteggio più basso perde una vit
 - gestione delle eliminazioni e del vincitore finale
 - possibilità di rigiocare al termine della partita
 
+## Robustezza e rete
+
+Il gioco è pensato per reggere connessioni instabili e sessioni multiple in tempo reale:
+
+- **Gestione delle disconnessioni.** Chi chiude la scheda o perde la rete ha un periodo di grazia per riconnettersi prima di perdere il posto al tavolo; scaduto quello, viene rimosso dalla partita come se avesse premuto "Esci" (con passaggio di turno e ricalcolo del vincitore se necessario). Il creatore della stanza, in attesa in lobby, gode di una grazia più lunga ma comunque limitata, così le stanze abbandonate non restano in memoria per sempre.
+- **Timeout del turno.** Se un giocatore non gioca entro il tempo massimo, il suo turno viene giocato d'ufficio (pesca e scarta) per non bloccare la partita.
+- **Heartbeat.** Il client invia un ping periodico per tenere viva la connessione WebSocket anche in lobby, dove non passa altro traffico, evitando la chiusura per inattività da parte di proxy e reverse proxy. Alla perdita della connessione il client tenta la riconnessione automatica con backoff, e riprova subito quando il tab torna in primo piano o la rete ritorna.
+- **Ordine degli aggiornamenti.** Ogni stato inviato ai client porta un numero di versione: i frame arrivati fuori ordine vengono scartati, così non si rende mai uno stato più vecchio di uno già ricevuto.
+- **Limiti anti-abuso.** Sul canale WebSocket i messaggi troppo lunghi e quelli oltre una soglia di frequenza per sessione vengono ignorati in silenzio, senza chiudere la connessione. La mescolata del mazzo usa un generatore crittograficamente sicuro, così l'ordine delle carte non è predicibile.
+
 ## Come avviare il gioco
 
 Prerequisiti: JDK 17 o superiore, Apache Tomcat 10 o superiore (necessario per il namespace `jakarta.*`) e un browser con supporto ai WebSocket.

@@ -11,8 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fixture condivise dai test: giocatori seduti, stati di gioco a seed
- * fisso, stanze con token legati e mani dal punteggio noto.
+ * Fixture condivise dai test: giocatori seduti, stati di gioco,
+ * stanze con token legati e mani dal punteggio noto.
  */
 public final class Fixtures {
 
@@ -25,11 +25,11 @@ public final class Fixtures {
         return p;
     }
 
-    /** Stato con n giocatori "Player1..N" già seduti, seed fisso 42, 3 vite. */
+    /** Stato con n giocatori "Player1..N" già seduti, 3 vite. */
     public static GameState newGame(int nPlayers) {
         List<Player> players = new ArrayList<>();
         for (int i = 0; i < nPlayers; i++) players.add(player("Player" + (i + 1)));
-        return new GameState(players, 42L, 3);
+        return new GameState(players, 3);
     }
 
     /** Stanza "TEST" con n giocatori seduti e token "t0".."tN-1" legati agli slot. */

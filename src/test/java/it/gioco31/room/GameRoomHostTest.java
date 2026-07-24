@@ -19,7 +19,7 @@ class GameRoomHostTest {
     private static GameRoom newRoom(int nSlots) {
         List<Player> players = new ArrayList<>();
         for (int i = 0; i < nSlots; i++) players.add(new Player("Slot " + (i + 1), 3));
-        return new GameRoom("TEST", new GameState(players, 42L, 3));
+        return new GameRoom("TEST", new GameState(players, 3));
     }
 
     private static void join(GameRoom room, String token, int idx) {

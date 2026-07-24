@@ -3,6 +3,7 @@ package it.gioco31.service;
 import it.gioco31.GameConstants;
 import it.gioco31.model.*;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,10 +12,20 @@ import java.util.Random;
 
 public final class ThirtyOneEngine {
 
+    /**
+     * Generatore per mescolate e ricariche. SecureRandom (CSPRNG): il vecchio
+     * new Random(seed + nanoTime) era un LCG a 48 bit, il cui stato interno si
+     * ricostruisce osservando poche carte — quindi il resto del mazzo diventava
+     * predicibile. SecureRandom non espone lo stato attraverso la sequenza
+     * prodotta. Istanza unica e condivisa: è thread-safe e la creazione (con
+     * relativo seeding) va fatta una sola volta.
+     */
+    private static final SecureRandom RNG = new SecureRandom();
+
     public void startRound(GameState s) {
         s.setWinnerIndex(null);
 
-        s.setDeck(Deck.newNeapolitan40(newRng(s)));
+        s.setDeck(Deck.newNeapolitan40(RNG));
         s.getDiscard().clear();
         s.setPendingDraw(null);
         s.setFinalTurnsRemaining(0);
@@ -70,7 +81,7 @@ public final class ThirtyOneEngine {
     public void drawPendingFromDeck(GameState s) {
         ensureActionAllowed(s);
         if (s.getPendingDraw() != null) throw new IllegalStateException("Hai già una carta pescata.");
-        refillDeckIfNeeded(s, newRng(s));
+        refillDeckIfNeeded(s, RNG);
         s.setPendingDraw(s.getDeck().draw());
         s.addEvent(safeName(s, s.getCurrentIndex()) + " pesca dal mazzo.");
     }
@@ -466,11 +477,6 @@ public final class ThirtyOneEngine {
         int c = 0;
         for (var p : s.getPlayers()) if (!p.isEliminated()) c++;
         return c;
-    }
-
-    /** Generatore per mescolate e ricariche: seme di partita + rumore temporale. */
-    private static Random newRng(GameState s) {
-        return new Random(s.getSeed() + System.nanoTime());
     }
 
     private void refillDeckIfNeeded(GameState s, Random rng) {

@@ -7,6 +7,8 @@ const RECENT_RESULT_MS = 15000;       // esito ancora "fresco" dopo un reload
 const TOAST_MS = 1600;
 const RECONNECT_BASE_DELAY_MS = 600;  // backoff esponenziale della riconnessione
 const RECONNECT_MAX_DELAY_MS = 5000;
+const RECONNECT_RETRY_ATTEMPTS = 8;   // dopo tanti tentativi mostra il pulsante "Riprova"
+const HEARTBEAT_MS = 20000;           // ping periodico: tiene vivo il socket dietro proxy/nginx
 const FX_THROTTLE_MS = 250;           // anti-doppione per le animazioni di pesca
 
 let ws = null;
@@ -21,6 +23,7 @@ let lastDeckFxAt = 0;
 
 let reconnectAttempts = 0;
 let reconnectTimer = null;
+let heartbeatTimer = null;
 
 let turnDeadlineLocal = null;
 let firstStateSeen = false;
@@ -310,6 +313,8 @@ function connect(){
         // Nuova connessione: la sequenza del server riparte dal nostro punto di
         // vista, il primo stato ricevuto va sempre applicato (non scartare nulla).
         lastAppliedSeq = -1;
+        hideReconnectBanner();
+        startHeartbeat();
     };
 
     ws.onmessage = (ev) => {
@@ -329,6 +334,8 @@ function connect(){
     };
 
     ws.onclose = (ev) => {
+        stopHeartbeat();
+
         const reason = String(ev.reason || "");
         const fatal = [
             "Room not found",
@@ -338,6 +345,7 @@ function connect(){
         ].some(x => reason.includes(x));
 
         if (fatal) {
+            hideReconnectBanner();
             console.warn("WS closed (fatal):", ev.code, reason);
             toast("Sei stato rimosso dalla stanza");
             setTimeout(() => {
@@ -351,13 +359,54 @@ function connect(){
         reconnectAttempts++;
 
         console.warn("WS closed. Reconnect in", delay, "ms", ev.code, reason);
-        toast("Connessione persa… riconnessione");
+        // Banner persistente (non un toast a ogni tentativo): resta finché il
+        // socket non si riapre, così l'utente vede lo stato senza spam.
+        showReconnectBanner();
         reconnectTimer = setTimeout(connect, delay);
     };
 
     ws.onerror = () => {
         try { ws.close(); } catch (e) {}
     };
+}
+
+/* Heartbeat: un ping ogni HEARTBEAT_MS tiene aperta la connessione anche in
+   lobby, dove non passa altro traffico, evitando la chiusura per inattività
+   di proxy/nginx. Attivo solo a socket aperto. */
+function startHeartbeat(){
+    stopHeartbeat();
+    heartbeatTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) sendAction("ping");
+    }, HEARTBEAT_MS);
+}
+
+function stopHeartbeat(){
+    if (heartbeatTimer != null) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+}
+
+function showReconnectBanner(){
+    const b = document.getElementById("reconnectBanner");
+    if (b) b.classList.add("on");
+    // Il pulsante "Riprova" compare solo dopo parecchi tentativi a vuoto.
+    const retry = document.getElementById("reconnectRetry");
+    if (retry) retry.style.display = (reconnectAttempts >= RECONNECT_RETRY_ATTEMPTS) ? "" : "none";
+}
+
+function hideReconnectBanner(){
+    const b = document.getElementById("reconnectBanner");
+    if (b) b.classList.remove("on");
+    const retry = document.getElementById("reconnectRetry");
+    if (retry) retry.style.display = "none";
+}
+
+function retryNow(){
+    reconnectAttempts = 0;
+    const retry = document.getElementById("reconnectRetry");
+    if (retry) retry.style.display = "none";
+    connect();
 }
 
 function sendAction(action, arg){
@@ -971,3 +1020,23 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(tickTurnTimer, 1000);
     connect();
 });
+
+/* Riconnessione reattiva: i timer in background su mobile vengono sospesi, così
+   il setTimeout del backoff può non scattare. Quando il tab torna visibile o la
+   rete ritorna, riproviamo subito (connect() ignora le chiamate ridondanti). */
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        reconnectAttempts = 0;
+        connect();
+    }
+});
+window.addEventListener("online", () => {
+    reconnectAttempts = 0;
+    connect();
+});
+
+/* Nessuna uscita automatica su pagehide: l'evento scatta anche su navigazioni
+   interne (l'avvio partita è una POST verso /start, un reload, il cambio app),
+   e liberare il posto in quei casi caccerebbe l'host proprio mentre avvia. La
+   liberazione dello slot è già garantita dalla chiusura del WebSocket, che fa
+   partire la grazia lato server (breve per i normali, lunga per l'host). */

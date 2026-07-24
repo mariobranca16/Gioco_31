@@ -67,7 +67,13 @@ public final class RoomMaintenance implements ServletContextListener {
                             () -> "Manutenzione fallita per la room " + room.roomId());
                 }
             }
-            RoomRepository.cleanupStaleRoomsNow();
+            // Le stanze rimosse perché stantie lasciano entry appese nel
+            // registro sessioni dell'endpoint: le ripuliamo qui, dove
+            // conosciamo sia il repository sia l'endpoint (nessuna dipendenza
+            // circolare tra i due).
+            for (String rid : RoomRepository.cleanupStaleRoomsNow()) {
+                RoomEndpoint.dropRoomSessions(rid);
+            }
         } catch (Throwable t) {
             // scheduleWithFixedDelay cancella il task per sempre se un
             // Throwable sfugge: da qui non deve mai uscire nulla.

@@ -26,7 +26,6 @@ public final class GameState implements Serializable {
 
     private Card pendingDraw = null;
 
-    private final long seed;
     private final int startingLives;
 
     private Integer winnerIndex = null;
@@ -143,9 +142,8 @@ public final class GameState implements Serializable {
         public String getMessage() { return message; }
     }
 
-    public GameState(List<Player> players, long seed, int startingLives) {
+    public GameState(List<Player> players, int startingLives) {
         this.players = players;
-        this.seed = seed;
         this.startingLives = Math.max(1, startingLives);
     }
 
@@ -176,8 +174,6 @@ public final class GameState implements Serializable {
 
     public Card getPendingDraw() { return pendingDraw; }
     public void setPendingDraw(Card pendingDraw) { this.pendingDraw = pendingDraw; }
-
-    public long getSeed() { return seed; }
 
     public int getStartingLives() { return startingLives; }
 
