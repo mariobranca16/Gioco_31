@@ -168,6 +168,32 @@ class RoomEndpointJsonTest {
     }
 
     @Test
+    void stateSeqIncreasesWithEachBump() throws Exception {
+        GameState s = playingState(3);
+
+        s.bumpSeq();
+        long first = parse(s, 0, false).get("stateSeq").asLong();
+        s.bumpSeq();
+        long second = parse(s, 0, false).get("stateSeq").asLong();
+
+        assertTrue(second > first, "ogni bumpSeq deve far crescere stateSeq");
+    }
+
+    @Test
+    void singleBroadcastSharesStateSeqAcrossViewers() throws Exception {
+        GameState s = playingState(3);
+
+        // Un solo bumpSeq, come dentro un broadcast, poi il JSON per ogni viewer.
+        s.bumpSeq();
+        long seqViewer0 = parse(s, 0, false).get("stateSeq").asLong();
+        long seqViewer1 = parse(s, 1, false).get("stateSeq").asLong();
+        long seqViewer2 = parse(s, 2, true).get("stateSeq").asLong();
+
+        assertEquals(seqViewer0, seqViewer1);
+        assertEquals(seqViewer1, seqViewer2);
+    }
+
+    @Test
     void gameOverSerializesWinnerIndex() throws Exception {
         GameState s = playingState(2);
         s.setPhase(Phase.GAME_OVER);

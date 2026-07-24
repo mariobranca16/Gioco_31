@@ -11,6 +11,7 @@ const FX_THROTTLE_MS = 250;           // anti-doppione per le animazioni di pesc
 
 let ws = null;
 let lastState = null;
+let lastAppliedSeq = -1;   // versione dell'ultimo stato applicato: scarta i frame più vecchi
 let currentNoticeId = null;
 let selectedDiscardIndex = null;
 let prevCurrentIndex = null;
@@ -306,11 +307,21 @@ function connect(){
 
     ws.onopen = () => {
         reconnectAttempts = 0;
+        // Nuova connessione: la sequenza del server riparte dal nostro punto di
+        // vista, il primo stato ricevuto va sempre applicato (non scartare nulla).
+        lastAppliedSeq = -1;
     };
 
     ws.onmessage = (ev) => {
         try {
-            lastState = JSON.parse(ev.data);
+            const state = JSON.parse(ev.data);
+            // Scarta i frame arrivati fuori ordine: applica solo stati più recenti.
+            const seq = state.stateSeq;
+            if (typeof seq === "number") {
+                if (seq <= lastAppliedSeq) return;
+                lastAppliedSeq = seq;
+            }
+            lastState = state;
             render();
         } catch (e) {
             console.error("Bad JSON", e);

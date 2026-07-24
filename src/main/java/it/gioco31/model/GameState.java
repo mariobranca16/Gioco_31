@@ -47,6 +47,13 @@ public final class GameState implements Serializable {
     private long roundResultSeq = 0;
     private RoundResult roundResult = null;
 
+    /**
+     * Numero di versione dello stato: cresce a ogni broadcast così il client
+     * può scartare i frame arrivati fuori ordine. bumpSeq() va invocato solo
+     * tenendo il lock della stanza.
+     */
+    private long stateSeq = 0;
+
     /** Voce del registro mosse, visibile a tutti i giocatori. */
     public static final class Event implements Serializable {
         @Serial
@@ -232,4 +239,9 @@ public final class GameState implements Serializable {
 
     public RoundResult getRoundResult() { return roundResult; }
     public void clearRoundResult() { roundResult = null; }
+
+    public long getStateSeq() { return stateSeq; }
+
+    /** Incrementa e ritorna la versione dello stato; solo col lock della stanza. */
+    public long bumpSeq() { return ++stateSeq; }
 }

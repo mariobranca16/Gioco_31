@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -225,39 +224,66 @@ public class RoomEndpoint {
         }
     }
 
+    /** Una sessione col suo JSON già pronto, da inviare fuori dal lock. */
+    private record Outbound(Session ws, String json) {}
+
     private static void broadcast(String rid, GameRoom room) {
         Set<Session> set = ROOM_SESSIONS.get(rid);
         if (set == null || set.isEmpty()) return;
 
         var snapshot = new ArrayList<>(set);
         var toRemove = new ArrayList<Session>();
+        var toCloseInvalid = new ArrayList<Session>();
+        var outbound = new ArrayList<Outbound>();
 
-        for (Session ws : snapshot) {
-            if (ws == null || !ws.isOpen()) {
-                toRemove.add(ws);
-                continue;
+        // Un solo giro di lock per l'intera stanza: bumpSeq() una volta sola e
+        // tutti i JSON costruiti dallo stesso istante dello stato. Così i viewer
+        // ricevono la stessa stateSeq (snapshot atomico tra giocatori) e gli
+        // invii, ordinati dalla sequenza, non possono più applicarsi fuori
+        // ordine sul client.
+        room.lock().lock();
+        try {
+            room.state().bumpSeq();
+            for (Session ws : snapshot) {
+                if (ws == null || !ws.isOpen()) {
+                    toRemove.add(ws);
+                    continue;
+                }
+
+                String token = (String) ws.getUserProperties().get("token");
+                if (token == null) {
+                    toRemove.add(ws);
+                    continue;
+                }
+
+                Integer viewer = room.indexByToken(token);
+                if (viewer == null) {
+                    // La chiusura è I/O: rimandata fuori dal lock.
+                    toRemove.add(ws);
+                    toCloseInvalid.add(ws);
+                    continue;
+                }
+
+                outbound.add(new Outbound(ws, buildStateJson(room.state(), viewer, room.isHost(token))));
             }
+        } finally {
+            room.lock().unlock();
+        }
 
-            String token = (String) ws.getUserProperties().get("token");
-            if (token == null) {
-                toRemove.add(ws);
-                continue;
-            }
-
-            Integer viewer = room.indexByToken(token);
-            if (viewer == null) {
-                toRemove.add(ws);
-                try { ws.close(close("Invalid player")); } catch (Exception ignore) {}
-                continue;
-            }
-
+        // Invio fuori dal lock e non bloccante (vedi sendState). Un errore
+        // sincrono qui (sessione chiusa nel frattempo) chiude la sessione:
+        // l'onClose penserà a rimuoverla dal registro.
+        for (Outbound o : outbound) {
             try {
-                sendState(ws, room, viewer, room.isHost(token));
-            } catch (Exception e) {
+                sendState(o.ws(), o.json());
+            } catch (RuntimeException e) {
                 LOG.log(Level.FINE, e, () -> "Invio stato fallito nella room " + rid + ", chiudo la sessione");
-                toRemove.add(ws);
-                try { ws.close(close("IO error")); } catch (Exception ignore) {}
+                closeQuietly(o.ws(), "IO error");
             }
+        }
+
+        for (Session ws : toCloseInvalid) {
+            closeQuietly(ws, "Invalid player");
         }
 
         for (Session ws : toRemove) {
@@ -269,23 +295,30 @@ public class RoomEndpoint {
         }
     }
 
-    private static void sendState(Session ws, GameRoom room, int viewerIndex, boolean viewerIsHost) throws Exception {
-        String json;
-        room.lock().lock();
+    /** Invia il JSON già pronto alla sessione, senza mai bloccare. */
+    private static void sendState(Session ws, String json) {
+        // Invio asincrono e non bloccante: lo sweeper è single-thread e serve
+        // tutte le stanze, quindi un client con la rete impallata non deve mai
+        // ritardare il broadcast (né il timeout dei turni). L'async remote di
+        // Tomcat accoda già gli invii della stessa sessione, e senza attesa non
+        // c'è nulla da serializzare: niente synchronized. La chiusura in caso
+        // di errore avviene nel callback.
+        RemoteEndpoint.Async remote = ws.getAsyncRemote();
+        remote.setSendTimeout(SEND_TIMEOUT_MS);
+        remote.sendText(json, result -> {
+            if (!result.isOK()) {
+                LOG.log(Level.FINE, result.getException(),
+                        () -> "Invio asincrono stato fallito, chiudo la sessione");
+                closeQuietly(ws, "IO error");
+            }
+        });
+    }
+
+    private static void closeQuietly(Session ws, String reason) {
+        if (ws == null) return;
         try {
-            json = buildStateJson(room.state(), viewerIndex, viewerIsHost);
-        } finally {
-            room.lock().unlock();
-        }
-        // Un solo invio alla volta per sessione, con attesa limitata: un client
-        // bloccato non deve congelare il broadcast (né lo sweeper, che passa
-        // di qui) a tempo indeterminato. Alla scadenza l'eccezione fa chiudere
-        // la sessione dal chiamante.
-        synchronized (ws) {
-            RemoteEndpoint.Async remote = ws.getAsyncRemote();
-            remote.setSendTimeout(SEND_TIMEOUT_MS);
-            remote.sendText(json).get(SEND_TIMEOUT_MS * 2, TimeUnit.MILLISECONDS);
-        }
+            ws.close(close(reason));
+        } catch (Exception ignore) {}
     }
 
     // package-private per i test
@@ -316,6 +349,7 @@ public class RoomEndpoint {
         Player.BestSuitScore best = handOwner.bestSameSuitScore();
 
         ObjectNode root = MAPPER.createObjectNode();
+        root.put("stateSeq", s.getStateSeq());
         root.put("phase", String.valueOf(s.getPhase()));
         root.put("viewerIndex", viewerIndex);
         root.put("currentIndex", s.getCurrentIndex());
