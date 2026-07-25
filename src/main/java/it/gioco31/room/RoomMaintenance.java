@@ -39,6 +39,7 @@ public final class RoomMaintenance implements ServletContextListener {
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
         if (executor != null) executor.shutdownNow();
+        RoomEndpoint.shutdown();
     }
 
     private static void sweep() {

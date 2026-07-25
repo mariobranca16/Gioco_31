@@ -301,14 +301,25 @@ function showDiscardFxLabel(text){
    ========================= */
 
 function connect(){
+    // Solo un socket vivo (aperto o in apertura) blocca un nuovo tentativo: uno
+    // in CLOSING non consegnerà più nulla e non tornerà mai aperto, quindi va
+    // superato invece che atteso (aspettarlo significherebbe non riconnettersi
+    // mai più se il browser non recapitasse il suo close).
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
 
-    ws = new WebSocket(wsUrl(ROOM_ID));
+    // Gli handler si chiudono sul socket a cui appartengono (sock) e non sulla
+    // variabile globale ws: un socket già sostituito può recapitare il suo
+    // close/error in ritardo, e senza questa guardia spegnerebbe l'heartbeat
+    // della connessione nuova, mostrerebbe il banner su una connessione sana o
+    // — su chiusura fatale — butterebbe l'utente fuori da una sessione valida.
+    const sock = new WebSocket(wsUrl(ROOM_ID));
+    ws = sock;
 
-    ws.onopen = () => {
+    sock.onopen = () => {
+        if (sock !== ws) return;
         reconnectAttempts = 0;
         // Nuova connessione: la sequenza del server riparte dal nostro punto di
         // vista, il primo stato ricevuto va sempre applicato (non scartare nulla).
@@ -317,7 +328,8 @@ function connect(){
         startHeartbeat();
     };
 
-    ws.onmessage = (ev) => {
+    sock.onmessage = (ev) => {
+        if (sock !== ws) return;
         try {
             const state = JSON.parse(ev.data);
             // Scarta i frame arrivati fuori ordine: applica solo stati più recenti.
@@ -333,7 +345,9 @@ function connect(){
         }
     };
 
-    ws.onclose = (ev) => {
+    sock.onclose = (ev) => {
+        // Socket superato: la connessione corrente è un'altra, non toccarla.
+        if (sock !== ws) return;
         stopHeartbeat();
 
         const reason = String(ev.reason || "");
@@ -365,8 +379,9 @@ function connect(){
         reconnectTimer = setTimeout(connect, delay);
     };
 
-    ws.onerror = () => {
-        try { ws.close(); } catch (e) {}
+    sock.onerror = () => {
+        // Chiude il socket che ha davvero fallito, non quello corrente.
+        try { sock.close(); } catch (e) {}
     };
 }
 
@@ -406,6 +421,15 @@ function retryNow(){
     reconnectAttempts = 0;
     const retry = document.getElementById("reconnectRetry");
     if (retry) retry.style.display = "none";
+
+    // Il pulsante compare quando la rete è messa male, e lì il socket resta
+    // spesso piantato in CONNECTING per decine di secondi (portale captive,
+    // rete morta): connect() si rifiuterebbe di partire e il pulsante
+    // sembrerebbe rotto. Lo abbandoniamo esplicitamente — passa in CLOSING e
+    // il suo close tardivo verrà ignorato dalle guardie sull'identità.
+    if (ws && ws.readyState === WebSocket.CONNECTING) {
+        try { ws.close(); } catch (e) {}
+    }
     connect();
 }
 
@@ -1023,17 +1047,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /* Riconnessione reattiva: i timer in background su mobile vengono sospesi, così
    il setTimeout del backoff può non scattare. Quando il tab torna visibile o la
-   rete ritorna, riproviamo subito (connect() ignora le chiamate ridondanti). */
+   rete ritorna, riproviamo subito (connect() ignora le chiamate ridondanti).
+
+   Senza azzerare reconnectAttempts: il contatore misura i tentativi falliti di
+   fila e si azzera da solo alla prima connessione riuscita. Resettarlo qui
+   terrebbe il backoff inchiodato al minimo — su un telefono che riaccende lo
+   schermo ogni pochi secondi con la rete giù significa martellare il server —
+   e impedirebbe per sempre la comparsa del pulsante "Riprova", che scatta
+   proprio dopo RECONNECT_RETRY_ATTEMPTS tentativi a vuoto. */
 document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-        reconnectAttempts = 0;
-        connect();
-    }
+    if (document.visibilityState === "visible") connect();
 });
-window.addEventListener("online", () => {
-    reconnectAttempts = 0;
-    connect();
-});
+window.addEventListener("online", () => connect());
 
 /* Nessuna uscita automatica su pagehide: l'evento scatta anche su navigazioni
    interne (l'avvio partita è una POST verso /start, un reload, il cambio app),

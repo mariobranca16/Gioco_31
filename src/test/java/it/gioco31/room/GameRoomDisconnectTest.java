@@ -49,16 +49,33 @@ class GameRoomDisconnectTest {
     }
 
     @Test
-    void hostInLobbyIsEvictedOnlyAfterLobbyGrace() {
+    void hostInLobbyHandsTheRoleToWhoIsStillConnected() {
         GameRoom room = newRoom(2);
         room.markConnected("t0");
-        room.markConnected("t1"); // resta connesso: non interferisce con lo sweep
+        room.markConnected("t1");
         long now = System.currentTimeMillis();
         room.markDisconnected("t0", now);
 
-        // La sola grazia normale non basta a rimuovere l'host in lobby.
+        List<String> expired = room.sweepDisconnected(now + GRACE + 1);
+
+        assertEquals(List.of("t0"), expired,
+                "con qualcun altro connesso l'host esce come chiunque altro");
+        assertTrue(room.isHost("t1"),
+                "il ruolo passa subito a chi è rimasto: la lobby deve restare avviabile");
+        assertNull(room.indexByToken("t0"));
+    }
+
+    @Test
+    void hostAloneInLobbyIsEvictedOnlyAfterLobbyGrace() {
+        GameRoom room = newRoom(2);
+        room.markConnected("t0");
+        room.releaseTokenAndFreeSlot("t1"); // l'host resta solo: nessun successore
+        long now = System.currentTimeMillis();
+        room.markDisconnected("t0", now);
+
+        // La sola grazia normale non basta a rimuovere l'host solo in lobby.
         assertTrue(room.sweepDisconnected(now + GRACE + 1).isEmpty(),
-                "l'host in lobby non scade con la sola grazia normale");
+                "l'host solo in lobby non scade con la sola grazia normale");
         assertEquals(0, room.indexByToken("t0"));
         assertTrue(room.state().getPlayers().get(0).isJoined());
 
@@ -70,6 +87,32 @@ class GameRoomDisconnectTest {
                 "dopo la grazia lunga di lobby il posto dell'host si libera");
         assertNull(room.indexByToken("t0"));
         assertFalse(room.state().getPlayers().get(0).isJoined());
+    }
+
+    @Test
+    void theLobbyGraceIsSpentOncePerRoomNotOncePerHost() {
+        GameRoom room = newRoom(2);
+        room.markConnected("t0");
+        room.releaseTokenAndFreeSlot("t1");
+        long now = System.currentTimeMillis();
+        room.markDisconnected("t0", now);
+
+        room.sweepDisconnected(now + GRACE + 1);              // concede la grazia lunga
+        long afterLobby = now + GRACE + GameConstants.HOST_LOBBY_GRACE_MS + 100;
+        room.sweepDisconnected(afterLobby);                    // e la esaurisce
+        assertNull(room.indexByToken("t0"));
+
+        // Arriva un visitatore che eredita il ruolo di host e non apre mai il
+        // WebSocket: se la grazia lunga fosse per token, si prenderebbe un'altra
+        // mezz'ora, e ogni visitatore terrebbe in vita la stanza all'infinito.
+        room.bindToken("t2", 0);
+        assertTrue(room.isHost("t2"), "senza host, chi arriva eredita il ruolo");
+
+        List<String> after = room.sweepDisconnected(afterLobby + 1);
+
+        assertEquals(List.of("t2"), after,
+                "la grazia lunga appartiene alla stanza: il nuovo host non ne ottiene un'altra");
+        assertFalse(room.hasAnyJoinedPlayers());
     }
 
     @Test

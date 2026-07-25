@@ -1,48 +1,36 @@
 package it.gioco31.ws;
 
 import it.gioco31.room.GameRoom;
-import it.gioco31.room.RoomRepository;
 import jakarta.websocket.Session;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Proxy;
-import java.util.HashMap;
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Hardening del canale: i messaggi troppo lunghi e quelli oltre la frequenza
  * consentita vengono scartati in silenzio, senza chiudere la sessione né
  * mutare lo stato (nessun broadcast, quindi nessun incremento di stateSeq).
+ * La semantica esatta della finestra è verificata, senza dipendere
+ * dall'orologio, in {@link RateWindowTest}.
  */
-class RoomEndpointRateLimitTest {
+class RoomEndpointRateLimitTest extends EndpointTestBase {
 
-    /** Sessione fittizia via proxy: porta il token, getAsyncRemote resta null. */
-    private static Session sessionWithToken(String token) {
-        Map<String, Object> props = new HashMap<>();
-        props.put("token", token);
-        return (Session) Proxy.newProxyInstance(
-                RoomEndpointRateLimitTest.class.getClassLoader(),
-                new Class<?>[]{Session.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "getUserProperties" -> props;
-                    case "isOpen"   -> true;
-                    case "hashCode" -> System.identityHashCode(proxy);
-                    case "equals"   -> proxy == args[0];
-                    default -> null;
-                });
+    /** Una raffica ha senso solo se sta dentro la finestra di un secondo. */
+    private static void assumeBurstFitsInTheWindow(long startNanos) {
+        assumeTrue(System.nanoTime() - startNanos < 1_000_000_000L,
+                "raffica troppo lenta: la finestra di 1 s si era già svuotata");
     }
 
     @Test
     void messagesOverMaxLengthAreDropped() {
-        GameRoom room = RoomRepository.createNewRoom(2, 3);
+        GameRoom room = newRoom(2);
         String rid = room.roomId();
         room.bindToken("t0", 0);
 
         Session ws = sessionWithToken("t0");
         RoomEndpoint.seedRoomSessionForTest(rid, ws);
-        RoomEndpoint endpoint = new RoomEndpoint(null);
+        RoomEndpoint endpoint = new RoomEndpoint();
 
         long before = room.state().getStateSeq();
 
@@ -57,31 +45,55 @@ class RoomEndpointRateLimitTest {
         endpoint.onMessage(ws, "ACTION:ackNotice:1", rid);
         assertTrue(room.state().getStateSeq() > before,
                 "un messaggio di lunghezza valida deve essere elaborato");
-
-        RoomEndpoint.dropRoomSessions(rid);
     }
 
     @Test
     void exceedingRatePerSecondIsSilentlyDropped() {
-        GameRoom room = RoomRepository.createNewRoom(2, 3);
+        GameRoom room = newRoom(2);
         String rid = room.roomId();
         room.bindToken("t0", 0);
 
         Session ws = sessionWithToken("t0");
         RoomEndpoint.seedRoomSessionForTest(rid, ws);
-        RoomEndpoint endpoint = new RoomEndpoint(null);
+        RoomEndpoint endpoint = new RoomEndpoint();
 
         long before = room.state().getStateSeq();
 
         // 20 messaggi validi nello stesso secondo passano; il 21° è scartato.
+        long start = System.nanoTime();
         for (int i = 0; i < 21; i++) {
             endpoint.onMessage(ws, "ACTION:ackNotice:1", rid);
         }
+        assumeBurstFitsInTheWindow(start);
 
         assertEquals(before + 20, room.state().getStateSeq(),
                 "al massimo 20 messaggi al secondo vengono elaborati, il 21° è scartato");
-        assertTrue(ws.isOpen(), "oltre soglia il messaggio è ignorato, la sessione non viene chiusa");
+        assertTrue(ws.isOpen(),
+                "oltre soglia il messaggio è ignorato, la sessione non viene chiusa");
+    }
 
-        RoomEndpoint.dropRoomSessions(rid);
+    @Test
+    void theLimitIsPerPlayerNotPerSocket() {
+        GameRoom room = newRoom(2);
+        String rid = room.roomId();
+        room.bindToken("t0", 0);
+
+        // Due socket dello stesso giocatore: la soglia resta una sola. Se fosse
+        // per sessione, basterebbe aprire più WebSocket per moltiplicarla.
+        Session first = sessionWithToken("t0");
+        Session second = sessionWithToken("t0");
+        RoomEndpoint.seedRoomSessionForTest(rid, first);
+        RoomEndpoint.seedRoomSessionForTest(rid, second);
+        RoomEndpoint endpoint = new RoomEndpoint();
+
+        long before = room.state().getStateSeq();
+
+        long start = System.nanoTime();
+        for (int i = 0; i < 11; i++) endpoint.onMessage(first, "ACTION:ackNotice:1", rid);
+        for (int i = 0; i < 10; i++) endpoint.onMessage(second, "ACTION:ackNotice:1", rid);
+        assumeBurstFitsInTheWindow(start);
+
+        assertEquals(before + 20, room.state().getStateSeq(),
+                "21 messaggi su due socket dello stesso token: il 21° va comunque scartato");
     }
 }

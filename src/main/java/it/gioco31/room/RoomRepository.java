@@ -33,6 +33,15 @@ public final class RoomRepository {
         return ROOMS.get(normalizeRoomId(roomId));
     }
 
+    /**
+     * Toglie una stanza dal registro. Il ciclo di vita normale passa da
+     * {@link #cleanupStaleRooms}: serve ai test per non lasciare stanze nella
+     * mappa statica, che è condivisa da tutte le classi della stessa JVM.
+     */
+    public static void remove(String roomId) {
+        ROOMS.remove(normalizeRoomId(roomId));
+    }
+
     /** Vista di sola lettura delle stanze attive (usata dallo sweeper periodico). */
     public static Collection<GameRoom> allRooms() {
         return Collections.unmodifiableCollection(ROOMS.values());

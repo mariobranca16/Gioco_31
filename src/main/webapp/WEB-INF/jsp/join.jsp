@@ -59,7 +59,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Open+Sans:wght@400;500;700;800&display=swap">
 
     <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=5">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=6">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=7">
     <link rel="stylesheet" href="<%= h(ctx) %>/css/join.css?v=3">
 </head>
 

@@ -29,6 +29,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,27 +47,38 @@ public class RoomEndpoint {
     /** Quante voci del registro mosse viaggiano in ogni stato. */
     private static final int EVENTS_IN_STATE = 15;
 
-    /** Anti-abuso del canale: lunghezza massima e messaggi al secondo per sessione. */
+    /** Anti-abuso del canale: lunghezza massima e messaggi al secondo per giocatore. */
     private static final int MAX_MSG_LEN = 200;
     private static final int MAX_MSG_PER_SEC = 20;
-    private static final String RATE_KEY = "rate";
+    private static final long RATE_WINDOW_NANOS = 1_000_000_000L;
 
     /**
-     * Finestra scorrevole O(1): conserva il timestamp degli ultimi
+     * Finestra scorrevole O(1): conserva l'istante degli ultimi
      * MAX_MSG_PER_SEC messaggi ammessi. Se il più vecchio dei venti è entro
-     * l'ultimo secondo, la soglia è superata. Un'istanza per sessione, negli
-     * userProperties; il container consegna i messaggi di una sessione in
-     * serie, quindi non serve sincronizzazione.
+     * l'ultimo secondo, la soglia è superata.
+     *
+     * <p>Il tempo è {@code System.nanoTime()}, monotono: con l'orologio di
+     * sistema una correzione NTP all'indietro renderebbe negativo il delta e
+     * bloccherebbe *ogni* messaggio del giocatore finché la finestra non si
+     * sblocca — e le voci rifiutate non invecchiano mai, perché non entrano
+     * nel ring.
+     *
+     * <p>{@code allow} è sincronizzato: il container consegna i messaggi di una
+     * sessione in ordine, ma non necessariamente sullo stesso thread, e la
+     * pubblicazione via ConcurrentHashMap non basta a rendere visibili le
+     * scritture successive sul ring.
      */
-    private static final class RateWindow {
+    static final class RateWindow { // package-private: testata direttamente
         private final long[] ring = new long[MAX_MSG_PER_SEC];
         private int idx = 0;
+        private int filled = 0;
 
-        boolean allow(long nowMs) {
-            // ring[idx] è il 20°-ultimo messaggio ammesso (0 = mai, quindi lontano).
-            if (nowMs - ring[idx] < 1000L) return false;
-            ring[idx] = nowMs;
+        synchronized boolean allow(long nowNanos) {
+            // ring[idx] è il 20°-ultimo messaggio ammesso, finché il ring è pieno.
+            if (filled == ring.length && nowNanos - ring[idx] < RATE_WINDOW_NANOS) return false;
+            ring[idx] = nowNanos;
             idx = (idx + 1) % ring.length;
+            if (filled < ring.length) filled++;
             return true;
         }
     }
@@ -72,15 +86,23 @@ public class RoomEndpoint {
     private static final Map<String, Set<Session>> ROOM_SESSIONS = new ConcurrentHashMap<>();
 
     /**
-     * HttpSession del client, iniettata dal configurator per questa singola
-     * connessione. Non passa più dalla mappa condivisa di ServerEndpointConfig,
-     * che due handshake simultanei potrebbero sovrascriversi a vicenda.
+     * roomId -> (token -> finestra di frequenza). Il limite è per giocatore e
+     * non per socket: nulla vieta a un client di aprire più WebSocket con lo
+     * stesso token (la riconnessione ci conta sopra), quindi una finestra per
+     * sessione si moltiplicherebbe per il numero di socket aperti — bastava
+     * aprirne cinquanta per avere cinquanta volte la soglia.
      */
-    private final HttpSession http;
+    private static final Map<String, Map<String, RateWindow>> RATE_WINDOWS = new ConcurrentHashMap<>();
 
-    public RoomEndpoint(HttpSession http) {
-        this.http = http;
-    }
+    /**
+     * Thread dedicato alle chiusure di sessione (vedi closeQuietly): sono
+     * bloccanti e non devono mai avvenire sul thread di manutenzione.
+     */
+    private static final ExecutorService CLOSER = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "gioco31-ws-closer");
+        t.setDaemon(true);
+        return t;
+    });
 
     @OnOpen
     public void onOpen(Session ws, @PathParam("roomId") String roomId) throws IOException {
@@ -89,6 +111,10 @@ public class RoomEndpoint {
         GameRoom room = RoomRepository.get(rid);
         if (room == null) { ws.close(close("Room not found")); return; }
 
+        // La HttpSession arriva dagli userProperties, che il container popola
+        // per singola connessione a partire da quanto scritto dal configurator
+        // durante l'handshake (vedi HttpSessionConfigurator).
+        HttpSession http = (HttpSession) ws.getUserProperties().get(HttpSessionConfigurator.HTTP_SESSION_KEY);
         if (http == null) { ws.close(close("No HTTP session")); return; }
 
         String token = (String) http.getAttribute("playerToken");
@@ -124,15 +150,19 @@ public class RoomEndpoint {
         // viene ignorato in silenzio (niente chiusura, niente errore al client),
         // prima di prendere il lock della stanza o scatenare un broadcast.
         if (msg.length() > MAX_MSG_LEN) return;
-        if (!allowRate(ws)) return;
 
         String rid = RoomRepository.normalizeRoomId(roomId);
 
+        String token = (String) ws.getUserProperties().get("token");
+        if (token == null) return;
+
+        // La stanza va verificata prima del rate limit: altrimenti un messaggio
+        // arrivato su una sessione la cui stanza è appena stata rimossa
+        // ricreerebbe la sua voce in RATE_WINDOWS, che nessuno pulirebbe più.
         GameRoom room = RoomRepository.get(rid);
         if (room == null) return;
 
-        String token = (String) ws.getUserProperties().get("token");
-        if (token == null) return;
+        if (!allowRate(rid, token)) return;
 
         Integer me = room.indexByToken(token);
         if (me == null) {
@@ -143,7 +173,15 @@ public class RoomEndpoint {
         String[] parts = msg.split(":", 3);
         if (parts.length < 2 || !"ACTION".equals(parts[0])) return;
 
-        boolean isPing = "ping".equals(parts[1]);
+        // Il ping è solo heartbeat: segnala attività e nient'altro. Va servito
+        // prima del lock, perché touch() scrive un volatile e non ha bisogno di
+        // esclusione, mentre quel lock serializza partite e broadcast di tutta
+        // la stanza. E niente broadcast: 6 client con un ping ogni 20 s
+        // produrrebbero altrimenti traffico e bump di stateSeq a vuoto.
+        if ("ping".equals(parts[1])) {
+            room.touch();
+            return;
+        }
 
         room.lock().lock();
         try {
@@ -153,10 +191,7 @@ public class RoomEndpoint {
             room.lock().unlock();
         }
 
-        // Il ping è solo heartbeat: non cambia lo stato, quindi niente broadcast
-        // (né bumpSeq). 6 client con un ping ogni 20 s genererebbero altrimenti
-        // traffico e incrementi di sequenza inutili in continuazione.
-        if (!isPing) broadcast(rid, room);
+        broadcast(rid, room);
     }
 
     @OnClose
@@ -178,18 +213,24 @@ public class RoomEndpoint {
 
         // Se era l'ultima connessione del giocatore, parte il periodo di grazia.
         if (!hasOpenSessionForToken(rid, token)) {
+            dropRateWindow(rid, token);
             room.markDisconnected(token, System.currentTimeMillis());
         }
     }
 
-    private static boolean allowRate(Session ws) {
-        Map<String, Object> props = ws.getUserProperties();
-        RateWindow rw = (RateWindow) props.get(RATE_KEY);
-        if (rw == null) {
-            rw = new RateWindow();
-            props.put(RATE_KEY, rw);
-        }
-        return rw.allow(System.currentTimeMillis());
+    private static boolean allowRate(String rid, String token) {
+        return RATE_WINDOWS
+                .computeIfAbsent(rid, k -> new ConcurrentHashMap<>())
+                .computeIfAbsent(token, k -> new RateWindow())
+                .allow(System.nanoTime());
+    }
+
+    /** La finestra vive finché il giocatore ha almeno un socket aperto. */
+    private static void dropRateWindow(String rid, String token) {
+        Map<String, RateWindow> byToken = RATE_WINDOWS.get(rid);
+        if (byToken == null) return;
+        byToken.remove(token);
+        if (byToken.isEmpty()) RATE_WINDOWS.remove(rid, byToken);
     }
 
     private static boolean hasOpenSessionForToken(String rid, String token) {
@@ -206,13 +247,8 @@ public class RoomEndpoint {
 
         String action = parts[1];
 
-        if ("ping".equals(action)) {
-            // Heartbeat del client: tiene viva la connessione (i proxy chiudono
-            // i WebSocket inattivi) e segnala attività. Non modifica lo stato;
-            // il broadcast è soppresso in onMessage.
-            room.touch();
-            return;
-        }
+        // Il ping non arriva mai fin qui: onMessage lo serve prima di prendere
+        // il lock (è solo heartbeat, non tocca lo stato).
 
         if ("ackNotice".equals(action)) {
             if (parts.length >= 3) {
@@ -295,6 +331,7 @@ public class RoomEndpoint {
      */
     public static void dropRoomSessions(String roomId) {
         String rid = RoomRepository.normalizeRoomId(roomId);
+        RATE_WINDOWS.remove(rid);
         Set<Session> set = ROOM_SESSIONS.remove(rid);
         if (set == null) return;
         for (Session ws : set) {
@@ -392,11 +429,34 @@ public class RoomEndpoint {
         });
     }
 
+    /**
+     * Chiude la sessione senza far attendere chi lo chiede. Session.close()
+     * spedisce il frame di chiusura in modo bloccante (Tomcat usa
+     * sendMessageBlock, fino al blocking send timeout: 20 s di default), e i
+     * chiamanti sono lo sweeper single-thread della manutenzione e i thread di
+     * I/O del container: un client col buffer TCP pieno fermerebbe il timeout
+     * dei turni e l'espulsione dei disconnessi di *tutte* le stanze. La
+     * chiusura è comunque best-effort, quindi la deleghiamo al closer.
+     */
     private static void closeQuietly(Session ws, String reason) {
         if (ws == null) return;
+        CloseReason cr = close(reason);
         try {
-            ws.close(close(reason));
-        } catch (Exception ignore) {}
+            CLOSER.execute(() -> {
+                try {
+                    ws.close(cr);
+                } catch (Exception ignore) {}
+            });
+        } catch (RejectedExecutionException ex) {
+            // Closer già fermo (shutdown del contesto): chiudi qui, in fase di
+            // arresto non c'è più nessuno sweeper da proteggere.
+            try { ws.close(cr); } catch (Exception ignore) {}
+        }
+    }
+
+    /** Ferma il closer allo shutdown del contesto (chiamato da RoomMaintenance). */
+    public static void shutdown() {
+        CLOSER.shutdownNow();
     }
 
     // package-private per i test

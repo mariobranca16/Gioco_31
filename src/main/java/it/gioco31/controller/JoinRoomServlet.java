@@ -109,8 +109,12 @@ public class JoinRoomServlet extends HttpServlet {
         resp.sendRedirect(req.getContextPath() + "/room?room=" + UrlUtil.enc(roomId));
     }
 
-    /** Occupa uno slot per il giocatore. Ritorna null se ok, altrimenti il messaggio d'errore. */
-    private static String tryJoin(GameRoom room, String candidate, String token) {
+    /**
+     * Occupa uno slot per il giocatore. Ritorna null se ok, altrimenti il
+     * messaggio d'errore. Package-private per essere testato direttamente:
+     * è il punto in cui più richieste concorrenti si contendono gli slot.
+     */
+    static String tryJoin(GameRoom room, String candidate, String token) {
         room.lock().lock();
         try {
             for (Player p : room.state().getPlayers()) {

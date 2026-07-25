@@ -206,6 +206,19 @@ button:focus-visible{
 }
 .toast.on{display:block;}
 
+/* Il banner di riconnessione resta acceso a lungo e può coesistere con un
+   toast: senza una riga propria i due si sovrapporrebbero pixel su pixel,
+   essendo fissi sulle stesse coordinate. Gli diamo la riga sopra.
+
+   Niente `display` qui: vincerebbe su `.toast{display:none}` per specificità
+   e il banner resterebbe acceso per sempre. La visibilità resta affidata alla
+   sola classe `.on`, come per il toast. */
+.toast.reconnect{ bottom: 72px; }
+.toast.reconnect.on{
+    display:flex;
+    align-items:center;
+}
+
 /* =========================
    Pagina join
    ========================= */

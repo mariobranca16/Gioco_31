@@ -54,7 +54,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Open+Sans:wght@400;500;700;800&display=swap">
 
     <link rel="stylesheet" href="<%= h(ctx) %>/css/base.css?v=5">
-    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=6">
+    <link rel="stylesheet" href="<%= h(ctx) %>/css/components.css?v=7">
     <link rel="stylesheet" href="<%= h(ctx) %>/css/room.css?v=13">
 </head>
 
@@ -237,8 +237,9 @@
 
     <div id="toast" class="toast">—</div>
 
-    <!-- Banner di riconnessione persistente: riusa lo stile .toast -->
-    <div id="reconnectBanner" class="toast" role="status" aria-live="polite">
+    <!-- Banner di riconnessione persistente: stile .toast, ma su una riga
+         propria (.reconnect) per non sovrapporsi ai toast di gioco -->
+    <div id="reconnectBanner" class="toast reconnect" role="status" aria-live="polite">
         <span id="reconnectMsg">Connessione persa… riconnessione in corso</span>
         <button id="reconnectRetry" class="ok" type="button"
                 style="display:none; margin-left:10px;" onclick="retryNow()">Riprova</button>
@@ -248,7 +249,7 @@
         window.__ROOM_ID__ = "<%= js(roomId) %>";
         window.__CTX__ = "<%= js(ctx) %>";
     </script>
-    <script defer src="<%= h(ctx) %>/js/room.js?v=11"></script>
+    <script defer src="<%= h(ctx) %>/js/room.js?v=12"></script>
 
     <% } %>
 </div>
