@@ -1,0 +1,45 @@
+# Build e test a ogni push e pull request. Il progetto gira su Java 17
+# (maven.compiler.release nel pom) e i test end-to-end avviano un Tomcat
+# embedded su una porta effimera: non serve nessun servizio esterno.
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      - name: Test (server)
+        run: ./mvnw -B --no-transfer-progress test
+
+      # Il codice di pagina non passa da Maven. Nessun npm install: i test
+      # girano col runner incluso in Node e non hanno dipendenze.
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test (client)
+        run: npm test
+
+      # Anche quando i test falliscono: è lì che i report servono.
+      - name: Report dei test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore

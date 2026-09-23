@@ -1,5 +1,6 @@
 package it.gioco31.ws;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -35,11 +36,21 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Il canale di gioco. Protocollo JSON in entrambe le direzioni: dal client
+ * arriva {@code {"action": "...", "arg": <numero opzionale>}}, dal server esce
+ * lo stato completo della stanza, oppure {@code {"pong": true}} in risposta
+ * all'heartbeat. Tutto ciò che non è conforme viene ignorato in silenzio,
+ * senza chiudere la connessione.
+ */
 @ServerEndpoint(value = "/ws/{roomId}", configurator = HttpSessionConfigurator.class)
 public class RoomEndpoint {
 
     private static final Logger LOG = Logger.getLogger(RoomEndpoint.class.getName());
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** Risposta all'heartbeat: il client la riconosce da questo campo. */
+    private static final String PONG_JSON = "{\"pong\":true}";
 
     /** Attesa massima per l'invio a un singolo client prima di considerarlo bloccato. */
     private static final long SEND_TIMEOUT_MS = 5_000L;
@@ -170,28 +181,39 @@ public class RoomEndpoint {
             return;
         }
 
-        String[] parts = msg.split(":", 3);
-        if (parts.length < 2 || !"ACTION".equals(parts[0])) return;
+        JsonNode request = parseRequest(msg);
+        if (request == null) return;
 
-        // Il ping è solo heartbeat: segnala attività e nient'altro. Va servito
-        // prima del lock, perché touch() scrive un volatile e non ha bisogno di
-        // esclusione, mentre quel lock serializza partite e broadcast di tutta
-        // la stanza. E niente broadcast: 6 client con un ping ogni 20 s
+        String action = request.path("action").asText("");
+        if (action.isEmpty()) return;
+
+        // Il ping è solo heartbeat: segnala attività e si prende il suo pong.
+        // Va servito prima del lock, perché touch() scrive un volatile e non ha
+        // bisogno di esclusione, mentre quel lock serializza partite e broadcast
+        // di tutta la stanza. E niente broadcast: 6 client con un ping ogni 20 s
         // produrrebbero altrimenti traffico e bump di stateSeq a vuoto.
-        if ("ping".equals(parts[1])) {
+        if ("ping".equals(action)) {
             room.touch();
+            sendPong(ws);
             return;
         }
 
+        JsonNode arg = request.path("arg");
+
+        boolean changed;
         room.lock().lock();
         try {
-            applyAction(room, me, room.isHost(token), parts);
+            changed = applyAction(room, me, room.isHost(token), action, arg);
             room.touch();
         } finally {
             room.lock().unlock();
         }
 
-        broadcast(rid, room);
+        // Solo se lo stato è davvero cambiato: un'azione sconosciuta o respinta
+        // da una guardia di fase/turno costava comunque un giro di lock, un JSON
+        // per ogni sessione e un bump di stateSeq che faceva ridisegnare i client
+        // per nulla.
+        if (changed) broadcast(rid, room);
     }
 
     @OnClose
@@ -242,67 +264,75 @@ public class RoomEndpoint {
         return false;
     }
 
-    private void applyAction(GameRoom room, int me, boolean isHost, String[] parts) {
-        GameState s = room.state();
+    /**
+     * Messaggio del client: un oggetto JSON {@code {"action": "...", "arg": ...}}.
+     * Qualsiasi altra cosa (JSON malformato, array, numero) viene ignorata in
+     * silenzio, come tutto il resto dell'input non valido su questo canale.
+     */
+    private static JsonNode parseRequest(String msg) {
+        try {
+            JsonNode node = MAPPER.readTree(msg);
+            return node.isObject() ? node : null;
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
 
-        String action = parts[1];
+    /**
+     * @return true se l'azione ha modificato lo stato della stanza, cioè se
+     *         c'è qualcosa da ritrasmettere. Le uscite anticipate qui sotto
+     *         sono tutte richieste che non lasciano traccia: niente broadcast.
+     */
+    private boolean applyAction(GameRoom room, int me, boolean isHost, String action, JsonNode arg) {
+        GameState s = room.state();
 
         // Il ping non arriva mai fin qui: onMessage lo serve prima di prendere
         // il lock (è solo heartbeat, non tocca lo stato).
 
         if ("ackNotice".equals(action)) {
-            if (parts.length >= 3) {
-                try {
-                    long id = Long.parseLong(parts[2]);
-                    s.clearNoticeForPlayer(me, id);
-                } catch (NumberFormatException ignored) {}
-            }
-            return;
+            if (!arg.canConvertToLong()) return false;
+            return s.clearNoticeForPlayer(me, arg.longValue());
         }
 
         if ("restartGame".equals(action)) {
-            if (s.getPhase() != Phase.GAME_OVER) return;
-            if (!isHost) return;
+            if (s.getPhase() != Phase.GAME_OVER) return false;
+            if (!isHost) return false;
             restartGame(room, s);
-            return;
+            return true;
         }
 
-        if (me < 0 || me >= s.getPlayers().size()) return;
-        if (s.getPlayers().get(me).isEliminated()) return;
+        if (me < 0 || me >= s.getPlayers().size()) return false;
+        if (s.getPlayers().get(me).isEliminated()) return false;
 
-        if (s.getPhase() == Phase.WAITING_FOR_PLAYERS) return;
-        if (s.getPhase() == Phase.GAME_OVER) return;
-        if (s.getCurrentIndex() != me) return;
+        if (s.getPhase() == Phase.WAITING_FOR_PLAYERS) return false;
+        if (s.getPhase() == Phase.GAME_OVER) return false;
+        if (s.getCurrentIndex() != me) return false;
 
-        switch (action) {
+        return switch (action) {
             case "drawDeck"    -> applyOrNotify(s, me, () -> room.engine().drawPendingFromDeck(s));
             case "drawDiscard" -> applyOrNotify(s, me, () -> room.engine().drawPendingFromDiscard(s));
             case "keep" -> {
-                Integer idx = parseIntOrNull(parts.length >= 3 ? parts[2] : null);
-                if (idx != null) applyOrNotify(s, me, () -> room.engine().keepPendingDraw(s, idx));
+                if (!arg.canConvertToInt()) yield false;
+                int idx = arg.intValue();
+                yield applyOrNotify(s, me, () -> room.engine().keepPendingDraw(s, idx));
             }
             case "reject" -> applyOrNotify(s, me, () -> room.engine().rejectDraw(s));
             case "knock"   -> applyOrNotify(s, me, () -> room.engine().knock(s));
-            default -> { /* ignore */ }
-        }
+            default -> false;
+        };
     }
 
-    /** Esegue una mossa; un rifiuto del motore diventa una notifica per il giocatore. */
-    private static void applyOrNotify(GameState s, int me, Runnable move) {
+    /**
+     * Esegue una mossa; un rifiuto del motore diventa una notifica per il giocatore.
+     * Torna sempre true: o la mossa è passata, o c'è un avviso nuovo da recapitare.
+     */
+    private static boolean applyOrNotify(GameState s, int me, Runnable move) {
         try {
             move.run();
         } catch (RuntimeException ex) {
             s.setNoticeForPlayer(me, ex.getMessage());
         }
-    }
-
-    private static Integer parseIntOrNull(String raw) {
-        if (raw == null) return null;
-        try {
-            return Integer.parseInt(raw);
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+        return true;
     }
 
     private void restartGame(GameRoom room, GameState s) {
@@ -410,23 +440,123 @@ public class RoomEndpoint {
         }
     }
 
+    /** Chiave della coda di invio negli userProperties della sessione. */
+    private static final String SENDER_KEY = "stateSender";
+
+    /**
+     * Invio serializzato per sessione. L'async remote di Tomcat <b>non</b>
+     * accoda: un secondo {@code sendText} mentre il primo è ancora in
+     * scrittura solleva {@code IllegalStateException} ("remote endpoint was in
+     * state [TEXT_FULL_WRITING]"), e il chiamante finiva per chiudere un client
+     * sanissimo come se avesse un errore di I/O. Basta un secondo giocatore che
+     * entra mentre il primo sta ancora ricevendo il suo stato.
+     *
+     * <p>Gli stati intermedi non vengono accodati ma <b>sostituiti</b>: ogni
+     * messaggio è un'istantanea completa, quindi mentre uno è in volo l'unico
+     * che conta è il più recente. Il client, che scarta gli stati con
+     * {@code stateSeq} più vecchia della sua, non vede differenza.
+     */
+    private static final class StateSender {
+        private boolean inFlight;
+        private String queued;
+
+        void send(Session ws, String json) {
+            synchronized (this) {
+                if (inFlight) {
+                    queued = json;
+                    return;
+                }
+                inFlight = true;
+            }
+            write(ws, json);
+        }
+
+        /**
+         * Invio che salta se c'è già altro in uscita. È per il pong, che serve
+         * solo come segno di vita: accodarlo significherebbe rischiare di
+         * sostituire uno stato non ancora spedito, e non ce n'è bisogno perché
+         * quello stato è a sua volta un segno di vita per il client.
+         */
+        void sendIfIdle(Session ws, String json) {
+            synchronized (this) {
+                if (inFlight) return;
+                inFlight = true;
+            }
+            write(ws, json);
+        }
+
+        private void write(Session ws, String json) {
+            // Non bloccante: lo sweeper è single-thread e serve tutte le stanze,
+            // quindi un client con la rete impallata non deve mai ritardare il
+            // broadcast (né il timeout dei turni) di tutte le altre.
+            RemoteEndpoint.Async remote = ws.getAsyncRemote();
+            try {
+                remote.setSendTimeout(SEND_TIMEOUT_MS);
+                remote.sendText(json, result -> {
+                    if (!result.isOK()) {
+                        abort(ws, result.getException());
+                        return;
+                    }
+
+                    String next;
+                    synchronized (this) {
+                        next = queued;
+                        queued = null;
+                        if (next == null) {
+                            inFlight = false;
+                            return;
+                        }
+                    }
+                    write(ws, next);
+                });
+            } catch (RuntimeException ex) {
+                // Se l'invio non parte nemmeno, il callback non arriverà mai:
+                // senza questo la sessione resterebbe per sempre "in scrittura"
+                // e non riceverebbe più uno stato.
+                abort(ws, ex);
+            }
+        }
+
+        /** Invio impossibile: si svuota la coda e si chiude la sessione. */
+        private void abort(Session ws, Throwable cause) {
+            synchronized (this) {
+                inFlight = false;
+                queued = null;
+            }
+            LOG.log(Level.FINE, cause, () -> "Invio stato fallito, chiudo la sessione");
+            closeQuietly(ws, "IO error");
+        }
+    }
+
     /** Invia il JSON già pronto alla sessione, senza mai bloccare. */
     private static void sendState(Session ws, String json) {
-        // Invio asincrono e non bloccante: lo sweeper è single-thread e serve
-        // tutte le stanze, quindi un client con la rete impallata non deve mai
-        // ritardare il broadcast (né il timeout dei turni). L'async remote di
-        // Tomcat accoda già gli invii della stessa sessione, e senza attesa non
-        // c'è nulla da serializzare: niente synchronized. La chiusura in caso
-        // di errore avviene nel callback.
-        RemoteEndpoint.Async remote = ws.getAsyncRemote();
-        remote.setSendTimeout(SEND_TIMEOUT_MS);
-        remote.sendText(json, result -> {
-            if (!result.isOK()) {
-                LOG.log(Level.FINE, result.getException(),
-                        () -> "Invio asincrono stato fallito, chiudo la sessione");
-                closeQuietly(ws, "IO error");
-            }
-        });
+        senderFor(ws).send(ws, json);
+    }
+
+    /**
+     * Risposta all'heartbeat. Serve al client per accorgersi di un socket
+     * morto: senza una risposta, in una stanza ferma non arriva alcun frame e
+     * "silenzio" non distinguerebbe una connessione sana da una caduta. Il
+     * client la riconosce dal campo {@code pong} e non la tratta come stato.
+     */
+    private static void sendPong(Session ws) {
+        senderFor(ws).sendIfIdle(ws, PONG_JSON);
+    }
+
+    /**
+     * La coda vive negli userProperties, così muore con la sessione e non
+     * serve un registro da ripulire a mano. Il lookup è sincronizzato sulla
+     * mappa perché non tutti i container la forniscono concorrente.
+     */
+    private static StateSender senderFor(Session ws) {
+        Map<String, Object> props = ws.getUserProperties();
+        synchronized (props) {
+            Object existing = props.get(SENDER_KEY);
+            if (existing instanceof StateSender sender) return sender;
+            StateSender sender = new StateSender();
+            props.put(SENDER_KEY, sender);
+            return sender;
+        }
     }
 
     /**
@@ -615,9 +745,9 @@ public class RoomEndpoint {
     }
 
     /**
-     * I testi di chiusura sono contratto col client: room.js li confronta
-     * per distinguere le chiusure definitive da quelle riconnettibili.
-     * Non riformularli senza aggiornare la lista in room.js.
+     * I testi di chiusura sono contratto col client: li confronta per
+     * distinguere le chiusure definitive da quelle riconnettibili.
+     * Non riformularli senza aggiornare FATAL_CLOSE_REASONS in js/net.js.
      */
     private static CloseReason close(String msg) {
         return new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, msg);
@@ -632,5 +762,14 @@ public class RoomEndpoint {
 
     static boolean hasRoomSessionsEntryForTest(String roomId) {
         return ROOM_SESSIONS.containsKey(RoomRepository.normalizeRoomId(roomId));
+    }
+
+    /** Sessioni ancora aperte nella stanza: i test E2E ci attendono sopra. */
+    static int openSessionCountForTest(String roomId) {
+        Set<Session> set = ROOM_SESSIONS.get(RoomRepository.normalizeRoomId(roomId));
+        if (set == null) return 0;
+        int n = 0;
+        for (Session ws : set) if (ws != null && ws.isOpen()) n++;
+        return n;
     }
 }

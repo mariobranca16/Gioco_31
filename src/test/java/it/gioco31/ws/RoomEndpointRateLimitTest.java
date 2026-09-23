@@ -35,14 +35,14 @@ class RoomEndpointRateLimitTest extends EndpointTestBase {
         long before = room.state().getStateSeq();
 
         // > 200 caratteri: scartato prima di qualsiasi elaborazione, nessun broadcast.
-        String tooLong = "ACTION:ackNotice:" + "1".repeat(200);
+        String tooLong = "{\"action\":\"ackNotice\",\"arg\":" + "1".repeat(200) + "}";
         assertTrue(tooLong.length() > 200);
         endpoint.onMessage(ws, tooLong, rid);
         assertEquals(before, room.state().getStateSeq(),
                 "un messaggio oltre i 200 caratteri non deve produrre broadcast");
 
         // Un messaggio normale, invece, passa e ritrasmette.
-        endpoint.onMessage(ws, "ACTION:ackNotice:1", rid);
+        endpoint.onMessage(ws, armedAckNotice(room, 0), rid);
         assertTrue(room.state().getStateSeq() > before,
                 "un messaggio di lunghezza valida deve essere elaborato");
     }
@@ -62,7 +62,7 @@ class RoomEndpointRateLimitTest extends EndpointTestBase {
         // 20 messaggi validi nello stesso secondo passano; il 21° è scartato.
         long start = System.nanoTime();
         for (int i = 0; i < 21; i++) {
-            endpoint.onMessage(ws, "ACTION:ackNotice:1", rid);
+            endpoint.onMessage(ws, armedAckNotice(room, 0), rid);
         }
         assumeBurstFitsInTheWindow(start);
 
@@ -89,8 +89,8 @@ class RoomEndpointRateLimitTest extends EndpointTestBase {
         long before = room.state().getStateSeq();
 
         long start = System.nanoTime();
-        for (int i = 0; i < 11; i++) endpoint.onMessage(first, "ACTION:ackNotice:1", rid);
-        for (int i = 0; i < 10; i++) endpoint.onMessage(second, "ACTION:ackNotice:1", rid);
+        for (int i = 0; i < 11; i++) endpoint.onMessage(first, armedAckNotice(room, 0), rid);
+        for (int i = 0; i < 10; i++) endpoint.onMessage(second, armedAckNotice(room, 0), rid);
         assumeBurstFitsInTheWindow(start);
 
         assertEquals(before + 20, room.state().getStateSeq(),

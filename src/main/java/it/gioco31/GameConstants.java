@@ -19,6 +19,15 @@ public final class GameConstants {
 
     public static final long ROOM_STALE_MS = 6L * 60 * 60 * 1000; // dopo 6 ore
 
+    /**
+     * Tetto alle stanze vive contemporaneamente. Il registro è una mappa statica
+     * e le stanze escono solo dallo sweeper dopo ROOM_STALE_MS: senza un limite,
+     * chi chiama /join?action=create in un ciclo riempie l'heap. Il valore è
+     * molto sopra l'uso reale e molto sotto lo spazio degli id (36^4 ≈ 1,7M),
+     * così il generatore non si trova mai a cercare un id in uno spazio saturo.
+     */
+    public static final int MAX_ROOMS = 5_000;
+
     /** Tempo concesso a un giocatore disconnesso per riconnettersi prima di essere rimosso. */
     public static final long DISCONNECT_GRACE_MS = 45_000L;
 

@@ -1,7 +1,5 @@
 package it.gioco31.model;
 
-import java.io.Serial;
-import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -9,10 +7,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Random;
 
-public final class Deck implements Serializable {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
+public final class Deck {
     private final Deque<Card> cards = new ArrayDeque<>();
 
     public static Deck newNeapolitan40(Random rng) {

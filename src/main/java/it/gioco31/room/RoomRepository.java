@@ -18,6 +18,9 @@ public final class RoomRepository {
     private static final SecureRandom RND = new SecureRandom();
     private static final char[] ALPH = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray();
 
+    /** Serializza tetto + inserimento in {@link #createNewRoom(int, int, int)}. */
+    private static final Object CREATE_LOCK = new Object();
+
     private RoomRepository() {}
 
     public static String normalizeRoomId(String roomId) {
@@ -71,20 +74,37 @@ public final class RoomRepository {
     }
 
     private static GameRoom createNewRoom(int roomIdLen, int slots, int lives) {
-        for (int attempt = 0; attempt < 10_000; attempt++) {
-            String roomId = randomRoomId(roomIdLen);
-
-            List<Player> players = new ArrayList<>(slots);
-            for (int i = 0; i < slots; i++) {
-                players.add(new Player("Slot " + (i + 1), lives));
+        // La creazione è serializzata perché il tetto va verificato insieme
+        // all'inserimento: con un semplice size() fuori dal lock, N richieste
+        // simultanee leggerebbero tutte lo stesso valore e sforerebbero. È una
+        // POST rara e il corpo è breve, quindi il costo non si nota. Le rimozioni
+        // concorrenti non danno fastidio: possono solo far scendere size().
+        synchronized (CREATE_LOCK) {
+            if (ROOMS.size() >= GameConstants.MAX_ROOMS) {
+                throw new RoomLimitReachedException(
+                        "Raggiunto il numero massimo di stanze attive (" + GameConstants.MAX_ROOMS + ").");
             }
 
-            GameState state = new GameState(players, lives);
+            for (int attempt = 0; attempt < 10_000; attempt++) {
+                String roomId = randomRoomId(roomIdLen);
 
-            GameRoom room = new GameRoom(roomId, state);
-            if (putIfAbsent(room)) return room;
+                List<Player> players = new ArrayList<>(slots);
+                for (int i = 0; i < slots; i++) {
+                    players.add(new Player("Slot " + (i + 1), lives));
+                }
+
+                GameState state = new GameState(players, lives);
+
+                GameRoom room = new GameRoom(roomId, state);
+                if (putIfAbsent(room)) return room;
+            }
+            throw new IllegalStateException("Impossibile creare una room (collisioni roomId).");
         }
-        throw new IllegalStateException("Impossibile creare una room (collisioni roomId).");
+    }
+
+    /** Il registro è pieno: la richiesta è legittima, ma non ora. */
+    public static final class RoomLimitReachedException extends IllegalStateException {
+        public RoomLimitReachedException(String message) { super(message); }
     }
 
     private static String randomRoomId(int len) {

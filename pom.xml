@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.example</groupId>
+    <groupId>it.gioco31</groupId>
     <artifactId>Gioco_31</artifactId>
     <version>1.0-SNAPSHOT</version>
     <name>Gioco_31</name>
@@ -14,6 +14,16 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>17</maven.compiler.release>
         <junit.version>5.13.2</junit.version>
+        <!--
+          Il container di riferimento è Tomcat 11: è l'unico che implementa le
+          API contro cui il progetto compila (Servlet 6.1, WebSocket 2.2). Con
+          la 10.1 (Servlet 6.0) sul classpath di test convivrebbero due copie
+          diverse degli stessi package. La major va tenuta allineata in tre
+          punti, altrimenti si sviluppa su un container e si esegue su un altro:
+          le dipendenze jakarta.* qui sotto, questa proprietà (test end-to-end)
+          e il containerId del plugin cargo (avvio locale).
+        -->
+        <tomcat.embed.version>11.0.5</tomcat.embed.version>
     </properties>
 
     <dependencies>
@@ -55,6 +65,35 @@
             <artifactId>jackson-databind</artifactId>
             <version>2.18.2</version>
         </dependency>
+
+        <!--
+          Container per i test end-to-end: tomcat-embed-websocket porta sia
+          l'implementazione lato server (registrata via ServletContainerInitializer)
+          sia quella del client jakarta.websocket usata dai test per collegarsi.
+        -->
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+            <version>${tomcat.embed.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-websocket</artifactId>
+            <version>${tomcat.embed.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!--
+          Serve solo perché il web.xml di default di Tomcat registra la servlet
+          JSP all'avvio del contesto: senza Jasper il contesto non parte. I test
+          non renderizzano JSP.
+        -->
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-jasper</artifactId>
+            <version>${tomcat.embed.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -76,7 +115,16 @@
                 <version>1.10.15</version>
                 <configuration>
                     <container>
-                        <containerId>tomcat10x</containerId>
+                        <containerId>tomcat11x</containerId>
+                        <!--
+                          Versione fissata a mano: lasciata a cargo, tomcat11x
+                          scarica una milestone (11.0.0-M26). Così l'avvio
+                          locale gira esattamente sul container dei test
+                          end-to-end, che è il senso di tomcat.embed.version.
+                        -->
+                        <zipUrlInstaller>
+                            <url>https://archive.apache.org/dist/tomcat/tomcat-11/v${tomcat.embed.version}/bin/apache-tomcat-${tomcat.embed.version}.zip</url>
+                        </zipUrlInstaller>
                     </container>
                     <deployables>
                         <deployable>

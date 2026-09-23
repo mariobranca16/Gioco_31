@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 public final class ThirtyOneEngine {
 
@@ -17,15 +16,19 @@ public final class ThirtyOneEngine {
      * new Random(seed + nanoTime) era un LCG a 48 bit, il cui stato interno si
      * ricostruisce osservando poche carte — quindi il resto del mazzo diventava
      * predicibile. SecureRandom non espone lo stato attraverso la sequenza
-     * prodotta. Istanza unica e condivisa: è thread-safe e la creazione (con
-     * relativo seeding) va fatta una sola volta.
+     * prodotta.
+     *
+     * Di istanza, non statico: engineNextBytes è sincronizzato sull'oggetto, e
+     * con un generatore unico ogni mescolata di ogni stanza si accodava dietro
+     * lo stesso monitor — per giunta con il lock della stanza già in mano. Il
+     * motore è già uno per stanza, quindi basta seguirlo.
      */
-    private static final SecureRandom RNG = new SecureRandom();
+    private final SecureRandom rng = new SecureRandom();
 
     public void startRound(GameState s) {
         s.setWinnerIndex(null);
 
-        s.setDeck(Deck.newNeapolitan40(RNG));
+        s.setDeck(Deck.newNeapolitan40(rng));
         s.getDiscard().clear();
         s.setPendingDraw(null);
         s.setFinalTurnsRemaining(0);
@@ -81,7 +84,7 @@ public final class ThirtyOneEngine {
     public void drawPendingFromDeck(GameState s) {
         ensureActionAllowed(s);
         if (s.getPendingDraw() != null) throw new IllegalStateException("Hai già una carta pescata.");
-        refillDeckIfNeeded(s, RNG);
+        refillDeckIfNeeded(s);
         s.setPendingDraw(s.getDeck().draw());
         s.addEvent(safeName(s, s.getCurrentIndex()) + " pesca dal mazzo.");
     }
@@ -479,7 +482,7 @@ public final class ThirtyOneEngine {
         return c;
     }
 
-    private void refillDeckIfNeeded(GameState s, Random rng) {
+    private void refillDeckIfNeeded(GameState s) {
         if (!s.getDeck().isEmpty()) return;
         if (s.getDiscard().size() <= 1) throw new IllegalStateException("Impossibile ricaricare il mazzo.");
 

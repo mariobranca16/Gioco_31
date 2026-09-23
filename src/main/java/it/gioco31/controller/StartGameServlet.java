@@ -5,6 +5,7 @@ import it.gioco31.room.GameRoom;
 import it.gioco31.room.RoomRepository;
 import it.gioco31.service.GameLifecycle;
 import it.gioco31.util.UrlUtil;
+import it.gioco31.ws.RoomEndpoint;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -55,6 +56,13 @@ public class StartGameServlet extends HttpServlet {
             req.getRequestDispatcher("/WEB-INF/jsp/room.jsp").forward(req, resp);
             return;
         }
+
+        // La partita è iniziata per tutti, non solo per chi ha premuto il
+        // pulsante: senza questo gli altri tavoli restavano fermi sulla lobby
+        // finché non arrivava un altro evento qualsiasi. Funzionava solo di
+        // rimbalzo, perché il redirect qui sotto fa ricaricare la pagina
+        // all'host e la riapertura del suo WebSocket ritrasmette a tutti.
+        RoomEndpoint.broadcastRoom(roomId);
 
         resp.sendRedirect(req.getContextPath() + "/room?room=" + UrlUtil.enc(roomId));
     }

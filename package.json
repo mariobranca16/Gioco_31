@@ -1,0 +1,9 @@
+{
+  "name": "gioco31-client",
+  "private": true,
+  "type": "module",
+  "description": "Test del codice di pagina (src/main/webapp/js). Nessuna dipendenza: girano col test runner incluso in Node.",
+  "scripts": {
+    "test": "node --test \"src/test/js/**/*.test.mjs\""
+  }
+}

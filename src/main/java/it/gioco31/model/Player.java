@@ -2,13 +2,10 @@ package it.gioco31.model;
 
 import it.gioco31.GameConstants;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public final class Player implements Serializable {
-    private static final long serialVersionUID = 1L;
-
+public final class Player {
     private String name;
     private final List<Card> hand = new ArrayList<>(3);
     private int lives;

@@ -249,7 +249,13 @@
         window.__ROOM_ID__ = "<%= js(roomId) %>";
         window.__CTX__ = "<%= js(ctx) %>";
     </script>
-    <script defer src="<%= h(ctx) %>/js/room.js?v=12"></script>
+    <%-- Modulo: si carica differito come un defer e vede window.__ROOM_ID__,
+         impostato qui sopra da uno script classico (che gira prima).
+
+         Niente ?v= come per i CSS: qui il markup cita solo main.js, mentre i
+         moduli che importa non passano da questa pagina e quel numero non li
+         toccherebbe. Alla loro invalidazione pensa JsCacheFilter. --%>
+    <script type="module" src="<%= h(ctx) %>/js/main.js"></script>
 
     <% } %>
 </div>

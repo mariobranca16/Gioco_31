@@ -57,7 +57,13 @@ public class JoinRoomServlet extends HttpServlet {
                     GameConstants.MIN_PLAYERS, GameConstants.MAX_PLAYERS);
             int lives = parseClamped(req.getParameter("lives"), GameConstants.DEFAULT_LIVES,
                     GameConstants.MIN_LIVES, GameConstants.MAX_LIVES);
-            room = RoomRepository.createNewRoom(slots, lives);
+            try {
+                room = RoomRepository.createNewRoom(slots, lives);
+            } catch (RoomRepository.RoomLimitReachedException ex) {
+                forwardJoinWithError(req, resp,
+                        "Il server ha troppe stanze attive: riprova tra qualche minuto.");
+                return;
+            }
             roomId = RoomRepository.normalizeRoomId(room.roomId());
 
         } else if ("join".equalsIgnoreCase(action)) {

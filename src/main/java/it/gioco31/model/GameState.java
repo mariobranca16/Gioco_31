@@ -1,17 +1,12 @@
 package it.gioco31.model;
 
-import java.io.Serial;
-import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class GameState implements Serializable {
-    @Serial
-    private static final long serialVersionUID = 1L;
-
+public final class GameState {
     private final List<Player> players;
     private Deck deck;
     private final Deque<Card> discard = new ArrayDeque<>();
@@ -54,10 +49,7 @@ public final class GameState implements Serializable {
     private long stateSeq = 0;
 
     /** Voce del registro mosse, visibile a tutti i giocatori. */
-    public static final class Event implements Serializable {
-        @Serial
-        private static final long serialVersionUID = 1L;
-
+    public static final class Event {
         private final long id;
         private final long atMs;
         private final String message;
@@ -74,10 +66,7 @@ public final class GameState implements Serializable {
     }
 
     /** Mano rivelata di un giocatore alla fine di un round. */
-    public static final class RevealedHand implements Serializable {
-        @Serial
-        private static final long serialVersionUID = 1L;
-
+    public static final class RevealedHand {
         private final int index;
         private final String name;
         private final int score;
@@ -104,10 +93,7 @@ public final class GameState implements Serializable {
     }
 
     /** Esito di un round concluso: messaggio e mani rivelate di tutti. */
-    public static final class RoundResult implements Serializable {
-        @Serial
-        private static final long serialVersionUID = 1L;
-
+    public static final class RoundResult {
         private final long id;
         private final long atMs;
         private final String message;
@@ -126,10 +112,7 @@ public final class GameState implements Serializable {
         public List<RevealedHand> getHands() { return hands; }
     }
 
-    public static final class Notice implements Serializable {
-        @Serial
-        private static final long serialVersionUID = 1L;
-
+    public static final class Notice {
         private final long id;
         private final String message;
 
@@ -205,11 +188,14 @@ public final class GameState implements Serializable {
         notices.put(playerIndex, new Notice(id, message));
     }
 
-    public void clearNoticeForPlayer(int playerIndex, long noticeId) {
+    /** @return true se l'avviso c'era davvero ed è stato rimosso. */
+    public boolean clearNoticeForPlayer(int playerIndex, long noticeId) {
         Notice n = notices.get(playerIndex);
         if (n != null && n.getId() == noticeId) {
             notices.remove(playerIndex);
+            return true;
         }
+        return false;
     }
 
     public void clearAllNotices() {
